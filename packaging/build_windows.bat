@@ -52,9 +52,20 @@ if errorlevel 1 (
 )
 
 echo.
+echo Kaldirici paketleniyor ^(rdpctl-kaldir.exe^)...
+%PY% -m PyInstaller --noconfirm packaging\rdpctl-kaldir.spec
+if errorlevel 1 (
+    echo.
+    echo [HATA] Kaldirici paketlenemedi.
+    pause
+    exit /b 1
+)
+
+echo.
 echo ============================================================
-echo   TAMAM!  Uygulamaniz hazir:
-echo   %cd%\dist\rdpctl.exe
+echo   TAMAM!  Dosyalariniz hazir:
+echo   %cd%\dist\rdpctl.exe          ^(uygulama^)
+echo   %cd%\dist\rdpctl-kaldir.exe   ^(kaldirici^)
 echo ============================================================
 echo.
 echo rdpctl.exe tek dosyadir; istediginiz bilgisayara kopyalayip

@@ -78,6 +78,34 @@ kopyalayıp **çift tıklamanız yeterli** — ayrı bir Python kurulumu gerekme
 > bulunduğu yönlendiricide **7443** portunun host'a yönlendirilmesi
 > (port forwarding) gerekir.
 
+## Kaldırma (rdpctl-kaldir.exe)
+
+Derleme betikleri uygulamanın yanında bir de **kaldırıcı** üretir:
+`dist\rdpctl-kaldir.exe`. Çift tıklayınca bilgisayarı tarar ve eski
+kurulumlardan kalanları listeler:
+
+| Bulunan | Varsayılan |
+|---|---|
+| Çalışan rdpctl süreçleri (önce kapatılır) | seçili |
+| Kurulum sihirbazıyla kurulmuş sürüm (kayıt defteri) | seçili |
+| `rdpctl.exe` kopyaları (Masaüstü, İndirilenler, Belgeler, Program Files…) | seçili |
+| Kısayollar ve Windows Güvenlik Duvarı kuralı | seçili |
+| `%USERPROFILE%\.rdpctl` (TLS anahtarı, sertifika, günlükler) | seçili |
+| Zip'ten çıkarılmış kaynak klasörleri | **seçili değil** |
+
+- Denetim günlükleri silinmeden önce **Masaüstüne yedeklenir** (kapatılabilir;
+  yedek alınamazsa ayarlar klasörü hiç silinmez).
+- Silmeden önce onay istenir; yalnızca `rdpctl.exe` adlı dosyalar ve
+  tanınan klasörler hedeflenir.
+- Program Files veya güvenlik duvarı kuralı için "Yönetici olarak aç" butonu çıkar.
+
+Komut satırı:
+
+```bash
+rdpctl-kaldir --list        # yalnızca listeler, hiçbir şey silmez
+rdpctl-kaldir --silent      # varsayılan seçimlerle arayüzsüz kaldırır
+```
+
 ## Geliştirici modu (paketlemeden çalıştırma)
 
 Python kuruluysa doğrudan da çalıştırabilirsiniz:
@@ -121,12 +149,16 @@ rdpctl/
   controller.py Kontrol eden istemci (giriş + görüntüleme + girdi gönderimi)
   app.py        Birleşik masaüstü başlatıcı (rol seçim ekranı)
   ui.py         Tasarım sistemi (tema, animasyonlu bileşenler)
+  uninstall.py  Kaldırıcı mantığı (tarama, yedekleme, silme, CLI)
+  uninstall_gui.py Kaldırıcı arayüzü
 packaging/
   rdpctl.spec       PyInstaller tanımı (tek-dosya, penceresiz)
-  build_windows.bat Windows için rdpctl.exe üretir
+  rdpctl-kaldir.spec PyInstaller tanımı (kaldırıcı)
+  build_windows.bat Windows için rdpctl.exe + rdpctl-kaldir.exe üretir
   build_macos.sh    macOS için rdpctl.app üretir
   build_linux.sh    Linux için rdpctl ikili dosyası üretir
 run_app.py      Masaüstü uygulaması giriş noktası (rol seçimi)
+run_uninstall.py Kaldırıcı giriş noktası
 ```
 
 Tel protokolü: her mesaj `[4 bayt big-endian uzunluk][UTF-8 JSON gövde]`.

@@ -4,4 +4,5 @@ set -e
 cd "$(dirname "$0")/.."
 python3 -m pip install --upgrade pyinstaller -r requirements.txt
 pyinstaller --noconfirm packaging/rdpctl.spec
-echo "Tamam -> dist/rdpctl"
+pyinstaller --noconfirm packaging/rdpctl-kaldir.spec
+echo "Tamam -> dist/rdpctl ve dist/rdpctl-kaldir"

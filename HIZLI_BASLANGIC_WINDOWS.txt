@@ -17,7 +17,8 @@ ADIM 2 - EXE olustur
 ----------------------------------------------------------------
   * Bu klasordeki  packaging\build_windows.bat  dosyasina CIFT TIKLA.
   * Betik gerekli parcalari internetten kurar ve paketler.
-  * Bitince  dist\rdpctl.exe  olusur ve klasor acilir.
+  * Bitince  dist\rdpctl.exe  ve  dist\rdpctl-kaldir.exe  olusur
+    ve klasor acilir.
 
   NOT: rdpctl.exe tek dosyadir. Artik Python gerekmez; bu dosyayi
        istediginiz Windows bilgisayara kopyalayip calistirabilirsiniz.
@@ -39,6 +40,15 @@ ADIM 3 - Iki bilgisayarda calistir ve baglan
   C) Kontrol edilen bilgisayarda onay penceresi cikar.
      "Kabul Et" denince kontrol baslar; ekranda kirmizi uyari
      bandi gorunur ve tum islemler kaydedilir.
+
+----------------------------------------------------------------
+KALDIRMA (eski surumleri temizlemek icin)
+----------------------------------------------------------------
+  * dist\rdpctl-kaldir.exe dosyasina cift tikla.
+  * Bilgisayar taranir; bulunan eski rdpctl.exe kopyalari, kisayollar
+    ve ayarlar listelenir. Istemediklerinin isaretini kaldir.
+  * "Secilenleri Kaldir" de. Gunlukler once Masaustune yedeklenir.
+  * Program Files icindeki kopyalar icin "Yonetici olarak ac" butonu cikar.
 
 ----------------------------------------------------------------
 AG NOTU
