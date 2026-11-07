@@ -1,0 +1,61 @@
+name: Windows EXE Derle
+
+# rdpctl.exe ve rdpctl-kaldir.exe'yi GERÇEK bir Windows makinesinde üretir.
+# Çalıştıktan sonra "Actions" sekmesindeki çalışmanın altında "Artifacts"
+# bölümünden indirilir. Etiket (tag) atılırsa bir Release'e de yüklenir.
+
+on:
+  workflow_dispatch:        # Actions sekmesinden elle çalıştırma
+  push:
+    branches:
+      - claude/**
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bağımlılıkları kur
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m pip install -r requirements.txt
+
+      - name: Uygulamayı ve kaldırıcıyı paketle
+        run: |
+          pyinstaller --noconfirm packaging/rdpctl.spec
+          pyinstaller --noconfirm packaging/rdpctl-kaldir.spec
+
+      - name: SHA-256 özetleri
+        shell: pwsh
+        run: |
+          Get-FileHash dist\rdpctl.exe,dist\rdpctl-kaldir.exe -Algorithm SHA256 |
+            Format-List | Tee-Object -FilePath dist\SHA256.txt
+
+      - name: Çıktıları yükle (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rdpctl-windows
+          path: |
+            dist/rdpctl.exe
+            dist/rdpctl-kaldir.exe
+            dist/SHA256.txt
+          if-no-files-found: error
+
+      - name: Etiketlendiyse Release'e ekle
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/rdpctl.exe
+            dist/rdpctl-kaldir.exe
+            dist/SHA256.txt
