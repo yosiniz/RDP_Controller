@@ -1,0 +1,128 @@
+name: Installers
+
+# rdpctl icin GERCEK tikla-kur kurulum programlari uretir:
+#   - Windows : rdpctl-setup.exe   (Inno Setup; Baslat menusu + Programlar listesi)
+#   - macOS   : rdpctl.dmg         (surukle-birak -> Applications)
+#
+# Bitince "Actions" sekmesindeki calismanin altindaki "Artifacts"ten indirilir.
+# Etiket (v*) atilirsa bir Release'e de yuklenir.
+
+on:
+  workflow_dispatch:        # Actions sekmesinden elle calistirma
+  push:
+    branches:
+      - claude/**
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  # Zararsiz; uygulama varsa ortam degiskeni olarak kullanabilir.
+  RDPCTL_RELAY_HOST: ${{ vars.RDPCTL_RELAY_HOST }}
+
+jobs:
+  # ===================================================================
+  #  WINDOWS: rdpctl-setup.exe (Inno Setup)
+  # ===================================================================
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bagimliliklari kur
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m pip install -r requirements.txt
+
+      - name: Uygulamayi ve kaldiriciyi paketle
+        run: |
+          pyinstaller --noconfirm packaging/rdpctl.spec
+          pyinstaller --noconfirm packaging/rdpctl-kaldir.spec
+
+      - name: Inno Setup'i kur
+        run: choco install innosetup -y --no-progress
+
+      - name: Kurulum programini (setup.exe) derle
+        shell: pwsh
+        run: |
+          # .iss icindeki "..\dist\..." yollari depo kokundeki dist\ klasorune bakar.
+          iscc win-yukleyici\rdpctl.iss
+          if (-not (Test-Path win-yukleyici\rdpctl-setup.exe)) {
+            throw "rdpctl-setup.exe uretilemedi"
+          }
+
+      - name: SHA-256 ozeti
+        shell: pwsh
+        run: |
+          Get-FileHash win-yukleyici\rdpctl-setup.exe -Algorithm SHA256 |
+            Format-List | Tee-Object -FilePath win-yukleyici\rdpctl-setup.exe.sha256.txt
+
+      - name: Ciktiyi yukle (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rdpctl-windows-installer
+          path: |
+            win-yukleyici/rdpctl-setup.exe
+            win-yukleyici/rdpctl-setup.exe.sha256.txt
+          if-no-files-found: error
+
+      - name: Etiketlendiyse Release'e ekle
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            win-yukleyici/rdpctl-setup.exe
+            win-yukleyici/rdpctl-setup.exe.sha256.txt
+
+  # ===================================================================
+  #  macOS: rdpctl.dmg (surukle-birak)
+  # ===================================================================
+  macos-installer:
+    runs-on: macos-14      # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+        # setup-python'un kendi Python'u tkinter'i (Tk) icerir; ayrica
+        # python-tk kurmaya gerek yoktur.
+
+      - name: Bagimliliklari kur
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m pip install -r requirements.txt
+
+      - name: Uygulamayi ve kaldiriciyi paketle
+        run: |
+          pyinstaller --noconfirm packaging/rdpctl.spec
+          pyinstaller --noconfirm packaging/rdpctl-kaldir.spec
+
+      - name: Kurulum imajini (.dmg) uret
+        run: bash macosx/make_dmg.sh
+
+      - name: SHA-256 ozeti
+        run: shasum -a 256 macosx/rdpctl.dmg | tee macosx/rdpctl.dmg.sha256.txt
+
+      - name: Ciktiyi yukle (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rdpctl-macos-dmg
+          path: |
+            macosx/rdpctl.dmg
+            macosx/rdpctl.dmg.sha256.txt
+          if-no-files-found: error
+
+      - name: Etiketlendiyse Release'e ekle
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            macosx/rdpctl.dmg
+            macosx/rdpctl.dmg.sha256.txt
