@@ -34,6 +34,23 @@ if [ -z "$PY" ]; then
 fi
 echo "Kullanılan Python: $($PY --version 2>&1)  ($PY)"
 
+# 1.5) tkinter (Tk) var mı? Homebrew Python'u Tk'yi ayrı paketler; yoksa
+#      derlenen .app arayüzsüz kalır ve açılmaz. Eksikse kurmayı dene.
+if ! "$PY" -c "import tkinter" >/dev/null 2>&1; then
+  PYVER=$("$PY" -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+  echo "tkinter (Tk) eksik — kurulmaya çalışılıyor (python-tk@$PYVER)…"
+  if command -v brew >/dev/null 2>&1; then
+    brew install "python-tk@$PYVER" || brew install python-tk || true
+  fi
+  if ! "$PY" -c "import tkinter" >/dev/null 2>&1; then
+    echo
+    echo "[HATA] tkinter hâlâ yok. Şunu çalıştırıp betiği tekrar deneyin:"
+    echo "    brew install python-tk@$PYVER"
+    exit 1
+  fi
+  echo "tkinter kuruldu."
+fi
+
 # 2) İzole sanal ortam (sistem/Xcode Python'ını kirletmeden)
 VENV=".build-venv"
 rm -rf "$VENV"

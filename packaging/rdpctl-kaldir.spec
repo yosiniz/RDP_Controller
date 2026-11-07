@@ -42,14 +42,18 @@ a = Analysis(
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+MAC = sys.platform == 'darwin'
+# macOS'ta .app HER ZAMAN onedir olmalı (onefile .app macOS güvenliğiyle çakışır).
+ONEDIR_MODE = ONEDIR or MAC
+
 exe = EXE(
     pyz,
     a.scripts,
-    [] if ONEDIR else a.binaries,
-    [] if ONEDIR else a.zipfiles,
-    [] if ONEDIR else a.datas,
+    [] if ONEDIR_MODE else a.binaries,
+    [] if ONEDIR_MODE else a.zipfiles,
+    [] if ONEDIR_MODE else a.datas,
     [],
-    exclude_binaries=ONEDIR,
+    exclude_binaries=ONEDIR_MODE,
     name='rdpctl-kaldir',
     debug=False,
     bootloader_ignore_signals=False,
@@ -57,7 +61,7 @@ exe = EXE(
     upx=USE_UPX,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,          # GUI uygulaması: konsol penceresi açma
+    console=False,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
@@ -66,19 +70,19 @@ exe = EXE(
     version=VERSION_FILE,
 )
 
-
-if ONEDIR and not sys.platform == 'darwin':
+if ONEDIR_MODE:
     coll = COLLECT(
         exe, a.binaries, a.zipfiles, a.datas,
         strip=False, upx=USE_UPX, upx_exclude=[], name='rdpctl-kaldir',
     )
 
-# macOS için .app paketi (çift tıkla açılır)
-if sys.platform == 'darwin':
+if MAC:
     app = BUNDLE(
-        exe,
+        coll,
         name='rdpctl-kaldir.app',
         icon=None,
         bundle_identifier='com.rdpctl.uninstall',
-        info_plist={'NSHighResolutionCapable': 'True'},
+        info_plist={
+            'NSHighResolutionCapable': 'True',
+        },
     )
