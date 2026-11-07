@@ -16,13 +16,15 @@ import io
 import os
 import queue
 import socket
+import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk
 from typing import Optional
 
 from . import protocol as proto
+from . import ui
+from .ui import THEME, f, mix
 from .audit import AuditLog
 from .auth import Identity, RateLimiter, code_matches, generate_session_code, valid_name
 from .fswatch import FileChangeWatcher
@@ -229,46 +231,138 @@ class HostApp:
     # --- GUI ---------------------------------------------------------------
     def _build_gui(self) -> None:
         self.root = tk.Tk()
-        self.root.title("rdpctl — Host (Kontrol Edilen Makine)")
-        self.root.geometry("760x560")
+        self.root.title("rdpctl — Bilgisayarımı Paylaş")
+        ui.apply_base(self.root)
+        W, H = 820, 680
+        ui.center(self.root, W, H)
+        self.root.minsize(720, 600)
 
-        top = ttk.Frame(self.root, padding=12)
-        top.pack(fill="x")
-        ttk.Label(top, text="Oturum Kodu", font=("", 10)).grid(row=0, column=0, sticky="w")
-        ttk.Label(top, text=self.session_code, font=("", 22, "bold"),
-                  foreground="#0a60c0").grid(row=1, column=0, sticky="w")
-        ttk.Label(top, text="Bu kodu yalnızca GÜVENDİĞİNİZ kişiyle paylaşın.",
-                  foreground="#a00").grid(row=2, column=0, sticky="w", pady=(0, 8))
+        # Degrade başlık + durum rozeti
+        head = tk.Canvas(self.root, height=86, highlightthickness=0, bd=0, bg=THEME.bg)
+        head.pack(fill="x")
 
-        info = ttk.LabelFrame(self.root, text="Bağlantı Bilgileri", padding=10)
-        info.pack(fill="x", padx=12)
-        ttk.Label(info, text=f"Dinlenen adres : {self.listen_host}:{self.listen_port}").pack(anchor="w")
-        ttk.Label(info, text=f"Sertifika parmak izi (SHA-256):").pack(anchor="w")
-        fp = ttk.Entry(info, width=90)
-        fp.insert(0, self.fingerprint)
-        fp.configure(state="readonly")
-        fp.pack(anchor="w", pady=(0, 4))
-        ttk.Label(info, text=f"Denetim günlüğü : {self.audit_path}").pack(anchor="w")
+        def paint_head(e=None):
+            w = head.winfo_width() or W
+            ui.gradient(head, w, 86, THEME.header_a, THEME.header_b)
+            head.delete("txt")
+            head.create_text(28, 32, anchor="w", text="🛡  Bilgisayarımı Paylaş",
+                             font=f(17, "bold"), fill="#FFFFFF", tags="txt")
+            head.create_text(30, 60, anchor="w", font=f(10), tags="txt",
+                             fill=mix("#FFFFFF", THEME.header_b, 0.2),
+                             text="Bağlantı yalnızca sizin onayınızla başlar.")
+            head.tag_raise("txt")
+        head.bind("<Configure>", paint_head)
 
-        self.status_var = tk.StringVar(value="Durum: bağlantı bekleniyor…")
-        ttk.Label(self.root, textvariable=self.status_var, font=("", 11, "bold")).pack(
-            anchor="w", padx=12, pady=(8, 2))
+        body = tk.Frame(self.root, bg=THEME.bg)
+        body.pack(fill="both", expand=True, padx=22, pady=18)
+        body.columnconfigure(0, weight=3)
+        body.columnconfigure(1, weight=2)
 
-        self.disconnect_btn = ttk.Button(self.root, text="Bağlantıyı Kes",
-                                         command=self._force_disconnect, state="disabled")
-        self.disconnect_btn.pack(anchor="w", padx=12)
+        # --- Kod kartı ---
+        code_card = self._card(body)
+        code_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        tk.Label(code_card, text="OTURUM KODUNUZ", bg=THEME.surface, fg=THEME.text_muted,
+                 font=f(9, "bold")).pack(anchor="w")
+        self._code_lbl = tk.Label(code_card, text="", bg=THEME.surface, fg="#7DD3FC",
+                                  font=(("Consolas" if sys.platform.startswith("win") else "monospace"),
+                                        32, "bold"))
+        self._code_lbl.pack(anchor="w", pady=(4, 10))
+        self._reveal_code()
+        row = tk.Frame(code_card, bg=THEME.surface)
+        row.pack(anchor="w")
+        ui.RoundedButton(row, "Kodu Kopyala", self._copy_code, kind="primary", icon="📋",
+                         width=160, height=40, bg=THEME.surface).pack(side="left")
+        tk.Label(code_card, text="⚠  Bu kodu yalnızca güvendiğiniz kişiyle paylaşın.",
+                 bg=THEME.surface, fg=THEME.warning, font=f(9)).pack(anchor="w", pady=(12, 0))
 
-        logframe = ttk.LabelFrame(self.root, text="Canlı Denetim Günlüğü", padding=6)
-        logframe.pack(fill="both", expand=True, padx=12, pady=10)
-        self.log_text = tk.Text(logframe, height=12, wrap="none", state="disabled")
+        # --- Bağlantı bilgileri kartı ---
+        info = self._card(body)
+        info.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        tk.Label(info, text="BAĞLANTI ADRESİ", bg=THEME.surface, fg=THEME.text_muted,
+                 font=f(9, "bold")).pack(anchor="w")
+        for ip in _local_ips():
+            tk.Label(info, text=f"{ip}", bg=THEME.surface, fg=THEME.text,
+                     font=f(15, "bold")).pack(anchor="w", pady=(4, 0))
+        tk.Label(info, text=f"Port: {self.listen_port}", bg=THEME.surface,
+                 fg=THEME.text_muted, font=f(10)).pack(anchor="w", pady=(2, 12))
+        tk.Label(info, text="🔒 TLS parmak izi", bg=THEME.surface, fg=THEME.text_muted,
+                 font=f(9, "bold")).pack(anchor="w")
+        short_fp = " ".join(self.fingerprint.split(":")[:8]) + " …"
+        tk.Label(info, text=short_fp, bg=THEME.surface, fg=THEME.text,
+                 font=f(9)).pack(anchor="w")
+
+        # --- Durum satırı ---
+        status = self._card(body, pady=12)
+        status.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(18, 0))
+        self.status_var = tk.StringVar(value="")
+        self._dot = ui.PulseDot(status, color=THEME.warning, size=18, bg=THEME.surface)
+        self._dot.pack(side="left", padx=(0, 10))
+        tk.Label(status, textvariable=self.status_var, bg=THEME.surface, fg=THEME.text,
+                 font=f(11, "bold")).pack(side="left")
+        self.disconnect_btn = ui.RoundedButton(status, "Bağlantıyı Kes", self._force_disconnect,
+                                               kind="danger", icon="⏻", width=170, height=38,
+                                               bg=THEME.surface)
+        self.disconnect_btn.pack(side="right")
+        self.disconnect_btn.set_enabled(False)
+        self._set_status("Bağlantı bekleniyor…", "waiting")
+
+        # --- Etkinlik günlüğü ---
+        logc = self._card(body, pady=12)
+        logc.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(18, 0))
+        body.rowconfigure(2, weight=1)
+        top = tk.Frame(logc, bg=THEME.surface)
+        top.pack(fill="x", pady=(0, 8))
+        tk.Label(top, text="📜  Canlı Etkinlik Günlüğü", bg=THEME.surface, fg=THEME.text,
+                 font=f(11, "bold")).pack(side="left")
+        tk.Label(top, text="kurcalamaya karşı korumalı", bg=THEME.surface,
+                 fg=THEME.text_muted, font=f(9)).pack(side="right")
+        wrap = tk.Frame(logc, bg=THEME.surface_2)
+        wrap.pack(fill="both", expand=True)
+        self.log_text = tk.Text(wrap, height=10, wrap="word", state="disabled",
+                                bg=THEME.surface_2, fg=THEME.text, bd=0, padx=12, pady=10,
+                                insertbackground=THEME.text, font=f(9),
+                                highlightthickness=0, relief="flat")
         self.log_text.pack(fill="both", expand=True, side="left")
-        sb = ttk.Scrollbar(logframe, command=self.log_text.yview)
+        sb = tk.Scrollbar(wrap, command=self.log_text.yview, bg=THEME.surface_2,
+                          troughcolor=THEME.surface_2, bd=0, highlightthickness=0)
         sb.pack(fill="y", side="right")
         self.log_text.configure(yscrollcommand=sb.set)
+        for tag, color in (("ok", THEME.success), ("bad", THEME.danger),
+                           ("file", THEME.warning), ("input", THEME.text_muted),
+                           ("time", mix(THEME.text_muted, THEME.surface_2, 0.3))):
+            self.log_text.tag_configure(tag, foreground=color)
 
         self._banner: Optional[tk.Toplevel] = None
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._pump_gui_queue)
+        ui.fade_in(self.root)
+
+    @staticmethod
+    def _card(parent, pady=18) -> tk.Frame:
+        return tk.Frame(parent, bg=THEME.surface, padx=20, pady=pady,
+                        highlightbackground=THEME.border, highlightthickness=1)
+
+    def _reveal_code(self, i: int = 0) -> None:
+        """Oturum kodunu karakter karakter beliren bir animasyonla gösterir."""
+        import random
+        code = self.session_code
+        shown = "".join(
+            ch if (k < i or ch == "-") else random.choice("0123456789")
+            for k, ch in enumerate(code))
+        self._code_lbl.configure(text=shown)
+        if i <= len(code):
+            self.root.after(45, lambda: self._reveal_code(i + 1))
+
+    def _copy_code(self) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.session_code)
+        ui.Toast.show(self.root, "✓ Oturum kodu kopyalandı")
+
+    def _set_status(self, text: str, state: str) -> None:
+        self.status_var.set(text)
+        color = {"waiting": THEME.warning, "active": THEME.success,
+                 "pending": THEME.primary}.get(state, THEME.text_muted)
+        self._dot.set_color(color)
 
     def _audit_to_gui(self, record: dict) -> None:
         self._gui_queue.put(("log", record))
@@ -282,20 +376,48 @@ class HostApp:
                 elif kind == "consent":
                     self._show_consent(payload)
                 elif kind == "status":
-                    self.status_var.set(payload)
+                    self._set_status(*payload)
                 elif kind == "session_end":
                     self._clear_banner()
-                    self.disconnect_btn.configure(state="disabled")
-                    self.status_var.set("Durum: bağlantı bekleniyor…")
+                    self.disconnect_btn.set_enabled(False)
+                    self._set_status("Bağlantı bekleniyor…", "waiting")
         except queue.Empty:
             pass
         self.root.after(100, self._pump_gui_queue)
 
+    _EVENT_TEXT = {
+        "session_start": ("ok", "Oturum başladı"),
+        "session_end": ("bad", "Oturum sona erdi"),
+        "auth_fail": ("bad", "Hatalı giriş denemesi"),
+        "file_change": ("file", "Dosya değişikliği"),
+        "input": ("input", "Girdi"),
+        "input_unavailable": ("bad", "Girdi denetimi kullanılamıyor"),
+        "frame_error": ("bad", "Ekran yakalama hatası"),
+    }
+    _FILE_KIND = {"created": "oluşturuldu", "deleted": "silindi",
+                  "modified": "değiştirildi", "moved": "taşındı"}
+
     def _append_log(self, record: dict) -> None:
-        line = f"[{record.get('ts','')}] {record.get('event','')}: " + ", ".join(
-            f"{k}={v}" for k, v in record.items() if k not in ("ts", "event", "prev"))
+        ev = record.get("event", "")
+        tag, title = self._EVENT_TEXT.get(ev, ("input", ev))
+        if ev == "consent":
+            tag, title = ("ok", "Erişim onaylandı") if record.get("granted") else ("bad", "Erişim reddedildi")
+        who = record.get("who", "")
+        if ev == "file_change":
+            detail = f"{self._FILE_KIND.get(record.get('kind'), record.get('kind'))}: {record.get('path')}"
+        elif ev == "input":
+            detail = record.get("detail", "")
+        else:
+            detail = " ".join(str(record[k]) for k in ("ip", "reason", "detail") if record.get(k))
+        ts = (record.get("ts", "")[11:19])
         self.log_text.configure(state="normal")
-        self.log_text.insert("end", line + "\n")
+        self.log_text.insert("end", f"{ts}  ", "time")
+        self.log_text.insert("end", f"● {title}", tag)
+        if who:
+            self.log_text.insert("end", f"  —  {who}")
+        if detail:
+            self.log_text.insert("end", f"\n          {detail}", "input")
+        self.log_text.insert("end", "\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
 
@@ -303,44 +425,101 @@ class HostApp:
         ident: Identity = ctx["identity"]
         ip: str = ctx["ip"]
         result_q: "queue.Queue" = ctx["result"]
+        TIMEOUT = 60
 
         dlg = tk.Toplevel(self.root)
         dlg.title("Bağlantı İzni")
-        dlg.grab_set()
+        dlg.configure(bg=THEME.surface)
+        dlg.resizable(False, False)
+        ui.center(dlg, 440, 400)
         dlg.attributes("-topmost", True)
-        ttk.Label(dlg, text="Uzaktan kontrol isteği", font=("", 14, "bold"),
-                  padding=12).pack()
-        ttk.Label(dlg, padding=(12, 0),
-                  text=f"Kişi : {ident.full_name}\nKaynak IP : {ip}\n\n"
-                       "Bu kişinin ekranınızı görmesine ve\n"
-                       "fare/klavyenizi kontrol etmesine izin veriyor musunuz?").pack()
-        btns = ttk.Frame(dlg, padding=12)
-        btns.pack()
+        dlg.grab_set()
+        try:
+            dlg.bell()
+        except tk.TclError:
+            pass
+
+        tk.Label(dlg, text="Uzaktan erişim isteği", bg=THEME.surface, fg=THEME.text_muted,
+                 font=f(10, "bold")).pack(pady=(24, 10))
+        # avatar (baş harfler)
+        av = tk.Canvas(dlg, width=76, height=76, bg=THEME.surface, highlightthickness=0)
+        av.pack()
+        av.create_oval(2, 2, 74, 74, fill=THEME.primary, outline=mix(THEME.primary, "#FFFFFF", .4), width=2)
+        initials = (ident.first_name[:1] + ident.last_name[:1]).upper()
+        av.create_text(38, 38, text=initials, fill="#FFFFFF", font=f(22, "bold"))
+        tk.Label(dlg, text=ident.full_name, bg=THEME.surface, fg=THEME.text,
+                 font=f(16, "bold")).pack(pady=(10, 0))
+        tk.Label(dlg, text=f"Kaynak adres: {ip}", bg=THEME.surface, fg=THEME.text_muted,
+                 font=f(9)).pack()
+        tk.Label(dlg, bg=THEME.surface, fg=THEME.text, font=f(10), justify="center",
+                 text="bu bilgisayarın ekranını görmek ve\nfare/klavyesini kontrol etmek istiyor."
+                 ).pack(pady=(12, 10))
+
+        # geri sayım çubuğu
+        bar = tk.Canvas(dlg, width=360, height=6, bg=THEME.surface_2, highlightthickness=0)
+        bar.pack()
+        left_lbl = tk.Label(dlg, text="", bg=THEME.surface, fg=THEME.text_muted, font=f(8))
+        left_lbl.pack(pady=(4, 0))
+
+        btns = tk.Frame(dlg, bg=THEME.surface)
+        btns.pack(pady=16)
+        state = {"done": False}
 
         def done(granted: bool):
+            if state["done"]:
+                return
+            state["done"] = True
             result_q.put(granted)
-            dlg.destroy()
+            try:
+                dlg.grab_release()
+                dlg.destroy()
+            except tk.TclError:
+                pass
 
-        ttk.Button(btns, text="Kabul Et", command=lambda: done(True)).pack(side="left", padx=6)
-        ttk.Button(btns, text="Reddet", command=lambda: done(False)).pack(side="left", padx=6)
+        ui.RoundedButton(btns, "Reddet", lambda: done(False), kind="ghost",
+                         width=150, height=42, bg=THEME.surface).pack(side="left", padx=6)
+        ui.RoundedButton(btns, "İzin Ver", lambda: done(True), kind="success", icon="✓",
+                         width=150, height=42, bg=THEME.surface).pack(side="left", padx=6)
         dlg.protocol("WM_DELETE_WINDOW", lambda: done(False))
-        # 60 sn içinde yanıt yoksa reddet.
-        dlg.after(60000, lambda: (done(False) if dlg.winfo_exists() else None))
+
+        import time as _t
+        start = _t.monotonic()
+
+        def tick():
+            if state["done"]:
+                return
+            remaining = TIMEOUT - (_t.monotonic() - start)
+            if remaining <= 0:
+                done(False)
+                return
+            frac = remaining / TIMEOUT
+            bar.delete("all")
+            col = THEME.primary if frac > 0.3 else THEME.warning
+            bar.create_rectangle(0, 0, 360 * frac, 6, fill=col, outline="")
+            left_lbl.configure(text=f"Yanıt verilmezse {int(remaining) + 1} sn içinde reddedilecek")
+            dlg.after(50, tick)
+
+        tick()
+        ui.fade_in(dlg)
 
     def _show_banner(self, name: str) -> None:
         self._clear_banner()
         b = tk.Toplevel(self.root)
         b.overrideredirect(True)
         b.attributes("-topmost", True)
-        try:
-            b.attributes("-alpha", 0.92)
-        except tk.TclError:
-            pass
+        b.configure(bg=THEME.danger)
         sw = b.winfo_screenwidth()
-        b.geometry(f"{sw}x34+0+0")
-        lbl = tk.Label(b, bg="#b00020", fg="white", font=("", 11, "bold"),
-                       text=f"● UZAKTAN KONTROL AKTİF — {name} bu bilgisayarı kontrol ediyor")
-        lbl.pack(fill="both", expand=True)
+        bw = min(680, sw - 40)
+        b.geometry(f"{bw}x42+{(sw - bw) // 2}+8")
+        inner = tk.Frame(b, bg=THEME.danger, padx=14)
+        inner.pack(fill="both", expand=True)
+        ui.PulseDot(inner, color="#FFFFFF", size=14, bg=THEME.danger).pack(side="left", padx=(0, 10))
+        tk.Label(inner, text=f"Uzaktan kontrol aktif — {name}", bg=THEME.danger, fg="#FFFFFF",
+                 font=f(10, "bold")).pack(side="left")
+        ui.RoundedButton(inner, "Sonlandır", self._force_disconnect, kind="ghost",
+                         width=110, height=30, radius=10, bg=THEME.danger,
+                         font=f(9, "bold")).pack(side="right", pady=6)
+        ui.fade_in(b)
         self._banner = b
 
     def _clear_banner(self) -> None:
@@ -440,8 +619,8 @@ class HostApp:
             sink=lambda kind, path: self.audit.file_change(identity.full_name, kind, path),
         )
         self._watcher.start()
-        self._gui_queue.put(("status", f"Durum: AKTİF — {identity.full_name} ({ip})"))
-        self.root.after(0, lambda: self.disconnect_btn.configure(state="normal"))
+        self._gui_queue.put(("status", (f"Aktif — {identity.full_name} bağlı ({ip})", "active")))
+        self.root.after(0, lambda: self.disconnect_btn.set_enabled(True))
         self.root.after(0, lambda: self._show_banner(identity.full_name))
         session.run()
 
@@ -467,6 +646,26 @@ class HostApp:
             except OSError:
                 pass
         self.root.destroy()
+
+
+def _local_ips():
+    """Bu bilgisayarın yerel ağ IP adres(ler)i."""
+    ips = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))  # paket gönderilmez; yalnızca rota seçilir
+        ips.append(s.getsockname()[0])
+        s.close()
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ip not in ips and not ip.startswith("127."):
+                ips.append(ip)
+    except OSError:
+        pass
+    return ips[:3] or ["127.0.0.1"]
 
 
 def ssl_error():

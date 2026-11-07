@@ -13,10 +13,12 @@ import queue
 import socket
 import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 from typing import Optional
 
 from . import protocol as proto
+from . import ui
+from .ui import THEME, f, mix
 from .auth import Identity
 
 
@@ -34,15 +36,60 @@ class ControllerApp:
         self._disp_h = 0
 
         self.root = tk.Tk()
-        self.root.title("rdpctl — Controller (Kontrol Eden)")
+        self.root.title("rdpctl — Uzak Bilgisayara Bağlan")
         self._build_login()
 
     # --- Giriş ekranı ------------------------------------------------------
     def _build_login(self) -> None:
-        self._login = ttk.Frame(self.root, padding=20)
+        ui.apply_base(self.root)
+        ui.center(self.root, 920, 600)
+        self.root.minsize(820, 560)
+        self._login = tk.Frame(self.root, bg=THEME.bg)
         self._login.pack(fill="both", expand=True)
-        ttk.Label(self._login, text="Uzak Bağlantı Girişi",
-                  font=("", 16, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 12))
+
+        # Sol: marka paneli (degrade)
+        side = tk.Canvas(self._login, width=340, highlightthickness=0, bd=0, bg=THEME.bg)
+        side.pack(side="left", fill="y")
+
+        def paint_side(e=None):
+            h = side.winfo_height() or 600
+            ui.gradient(side, 340, h, THEME.header_a, THEME.header_b)
+            side.delete("txt")
+            side.create_text(36, 70, anchor="w", text="🛡", font=f(34), fill="#FFFFFF", tags="txt")
+            side.create_text(36, 130, anchor="w", text="Güvenli bağlantı", font=f(20, "bold"),
+                             fill="#FFFFFF", tags="txt")
+            side.create_text(36, 162, anchor="w", font=f(10), tags="txt",
+                             fill=mix("#FFFFFF", THEME.header_b, 0.2),
+                             text="Karşı taraf onaylamadan hiçbir\nbağlantı başlamaz.")
+            y = 240
+            for icon, t1, t2 in (("🔒", "Uçtan uca TLS", "Tüm trafik şifrelenir"),
+                                 ("✋", "Açık onay", "Ekran sahibi izin verir"),
+                                 ("👤", "Kimlik zorunlu", "Ad-soyadınız görünür"),
+                                 ("📜", "Tam kayıt", "Her işlem günlüğe yazılır")):
+                side.create_oval(36, y - 18, 72, y + 18, tags="txt",
+                                 fill=mix(THEME.header_a, "#FFFFFF", 0.15), outline="")
+                side.create_text(54, y, text=icon, font=f(13), tags="txt", fill="#FFFFFF")
+                side.create_text(88, y - 8, anchor="w", text=t1, font=f(11, "bold"),
+                                 fill="#FFFFFF", tags="txt")
+                side.create_text(88, y + 10, anchor="w", text=t2, font=f(9), tags="txt",
+                                 fill=mix("#FFFFFF", THEME.header_b, 0.25))
+                y += 62
+        side.bind("<Configure>", paint_side)
+
+        # Sağ: form kartı
+        right = tk.Frame(self._login, bg=THEME.bg)
+        right.pack(side="left", fill="both", expand=True)
+        card = tk.Frame(right, bg=THEME.surface, padx=36, pady=30,
+                        highlightbackground=THEME.border, highlightthickness=1)
+        card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.88)
+        card.columnconfigure(0, weight=1, uniform="c")
+        card.columnconfigure(1, weight=1, uniform="c")
+
+        tk.Label(card, text="Uzak bilgisayara bağlan", bg=THEME.surface, fg=THEME.text,
+                 font=f(17, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
+        tk.Label(card, text="Karşı taraftan aldığınız bilgileri girin.", bg=THEME.surface,
+                 fg=THEME.text_muted, font=f(10)).grid(row=1, column=0, columnspan=2,
+                                                      sticky="w", pady=(2, 18))
 
         self.vars = {
             "first": tk.StringVar(value=self.args.first_name or ""),
@@ -51,45 +98,113 @@ class ControllerApp:
             "port": tk.StringVar(value=str(self.args.port)),
             "code": tk.StringVar(value=""),
         }
-        rows = [
-            ("Ad *", "first"),
-            ("Soyad *", "last"),
-            ("Host adresi", "host"),
-            ("Port", "port"),
-            ("Oturum kodu", "code"),
-        ]
-        for i, (label, key) in enumerate(rows, start=1):
-            ttk.Label(self._login, text=label).grid(row=i, column=0, sticky="w", pady=3)
-            ttk.Entry(self._login, textvariable=self.vars[key], width=34).grid(
-                row=i, column=1, pady=3)
+        first = self._field(card, "Ad", "first", 2, 0)
+        self._field(card, "Soyad", "last", 2, 1)
+        self._field(card, "Bilgisayar adresi (IP)", "host", 4, 0, placeholder="192.168.1.50")
+        self._field(card, "Port", "port", 4, 1, width=8)
+        code_e = self._field(card, "Oturum kodu", "code", 6, 0, colspan=2, big=True,
+                             placeholder="123-456-789")
+        code_e.bind("<Return>", lambda e: self._do_connect())
 
-        self.login_status = ttk.Label(self._login, text="", foreground="#a00")
-        self.login_status.grid(row=7, column=0, columnspan=2, pady=(6, 0))
-        self.connect_btn = ttk.Button(self._login, text="Bağlan", command=self._do_connect)
-        self.connect_btn.grid(row=8, column=0, columnspan=2, pady=12)
+        self.connect_btn = ui.RoundedButton(card, "Güvenli Bağlan", self._do_connect,
+                                            kind="primary", icon="🔒", width=360, height=46,
+                                            bg=THEME.surface)
+        self.connect_btn.grid(row=8, column=0, columnspan=2, pady=(22, 0))
+
+        st = tk.Frame(card, bg=THEME.surface)
+        st.grid(row=9, column=0, columnspan=2, pady=(14, 0))
+        self._spinner = ui.Spinner(st, size=20, bg=THEME.surface, width=3)
+        self._spinner.pack(side="left", padx=(0, 8))
+        self.login_status = tk.Label(st, text="", bg=THEME.surface, fg=THEME.text_muted,
+                                     font=f(10), wraplength=340, justify="left")
+        self.login_status.pack(side="left")
+
+        first.focus_set()
+        ui.fade_in(self.root)
+
+    def _field(self, parent, label, key, row, col, colspan=1, width=None, big=False,
+               placeholder=""):
+        tk.Label(parent, text=label, bg=THEME.surface, fg=THEME.text_muted,
+                 font=f(9, "bold")).grid(row=row, column=col, columnspan=colspan,
+                                         sticky="w", padx=(0 if col == 0 else 10, 0))
+        holder = tk.Frame(parent, bg=THEME.border, padx=1, pady=1)
+        holder.grid(row=row + 1, column=col, columnspan=colspan, sticky="ew",
+                    padx=(0 if col == 0 else 10, 0), pady=(4, 12))
+        e = tk.Entry(holder, textvariable=self.vars[key], bg=THEME.surface_2, fg=THEME.text,
+                     insertbackground=THEME.text, relief="flat", bd=0, highlightthickness=0,
+                     font=f(15 if big else 11, "bold" if big else "normal"),
+                     width=width or 6)
+        e.pack(fill="x", ipady=9 if big else 7, ipadx=10)
+        # odakta kenarlık rengi yumuşakça maviye döner
+        e.bind("<FocusIn>", lambda ev: self._glow(holder, THEME.primary))
+        e.bind("<FocusOut>", lambda ev: self._glow(holder, THEME.border))
+        if placeholder and not self.vars[key].get():
+            self._placeholder(e, key, placeholder)
+        return e
+
+    def _placeholder(self, e, key, text):
+        var = self.vars[key]
+        state = {"on": True}
+
+        def show():
+            state["on"] = True
+            e.configure(fg=THEME.text_muted)
+            var.set(text)
+
+        def hide(_=None):
+            if state["on"]:
+                state["on"] = False
+                var.set("")
+                e.configure(fg=THEME.text)
+
+        def maybe_show(_=None):
+            if not var.get():
+                show()
+
+        show()
+        e.bind("<FocusIn>", hide, add="+")
+        e.bind("<FocusOut>", maybe_show, add="+")
+        self._placeholders = getattr(self, "_placeholders", {})
+        self._placeholders[key] = state
+
+    def _value(self, key) -> str:
+        st = getattr(self, "_placeholders", {}).get(key)
+        if st and st["on"]:
+            return ""
+        return self.vars[key].get()
+
+    def _glow(self, widget, target, i=0):
+        cur = widget.cget("bg")
+        nxt = mix(cur, target, 0.4)
+        widget.configure(bg=nxt)
+        if i < 6:
+            widget.after(16, lambda: self._glow(widget, target, i + 1))
+        else:
+            widget.configure(bg=target)
 
     def _do_connect(self) -> None:
         try:
-            identity = Identity(self.vars["first"].get(), self.vars["last"].get())
+            identity = Identity(self._value("first"), self._value("last"))
             identity.validate()
         except ValueError as exc:
-            self.login_status.configure(text=str(exc))
+            self._login_fail(str(exc))
             return
-        host = self.vars["host"].get().strip()
+        host = self._value("host").strip()
         if not proto.is_valid_host(host):
-            self.login_status.configure(text="Geçerli bir host adresi girin.")
+            self._login_fail("Geçerli bir bilgisayar adresi girin.")
             return
         try:
             port = int(self.vars["port"].get())
             assert 1 <= port <= 65535
         except (ValueError, AssertionError):
-            self.login_status.configure(text="Geçersiz port.")
+            self._login_fail("Geçersiz port.")
             return
         self.identity = identity
         self.connect_btn.configure(state="disabled")
-        self.login_status.configure(text="Bağlanılıyor…", foreground="#333")
+        self.login_status.configure(text="Güvenli bağlantı kuruluyor…", fg=THEME.text_muted)
+        self._spinner.start()
         threading.Thread(target=self._connect_worker,
-                         args=(host, port, self.vars["code"].get()), daemon=True).start()
+                         args=(host, port, self._value("code")), daemon=True).start()
 
     def _connect_worker(self, host: str, port: int, code: str) -> None:
         try:
@@ -124,7 +239,7 @@ class ControllerApp:
                 conn.close()
                 return
             # Onay bekle
-            self._login_status_async("Host onayı bekleniyor…")
+            self._login_status_async("Karşı tarafın onayı bekleniyor…")
             if reply.get("type") == proto.MSG_CONSENT_PENDING:
                 reply = proto.recv_msg(conn)
             if reply.get("type") == proto.MSG_CONSENT_DENIED:
@@ -150,27 +265,52 @@ class ControllerApp:
 
     def _login_fail(self, text: str) -> None:
         def go():
-            self.login_status.configure(text=text, foreground="#a00")
+            self._spinner.stop()
+            self.login_status.configure(text="✕  " + text, fg=THEME.danger)
             self.connect_btn.configure(state="normal")
+            self._shake(self.connect_btn)
         self.root.after(0, go)
 
+    def _shake(self, widget, i=0):
+        """Hata durumunda kısa yatay sallanma animasyonu."""
+        offsets = [0, -8, 8, -6, 6, -3, 3, 0]
+        if i < len(offsets):
+            widget.grid_configure(padx=(max(0, 0 + offsets[i]), max(0, -offsets[i])))
+            widget.after(30, lambda: self._shake(widget, i + 1))
+
     def _login_status_async(self, text: str) -> None:
-        self.root.after(0, lambda: self.login_status.configure(text=text, foreground="#333"))
+        self.root.after(0, lambda: self.login_status.configure(text=text, fg=THEME.text_muted))
 
     # --- Görüntüleyici -----------------------------------------------------
     def _build_viewer(self) -> None:
+        self._spinner.stop()
         self._login.destroy()
-        bar = ttk.Frame(self.root, padding=4)
-        bar.pack(fill="x")
-        ttk.Label(bar, text=f"Bağlı: {self.identity.full_name}  "
-                            f"→  {self.vars['host'].get()}  "
-                            f"({self._remote_w}×{self._remote_h})").pack(side="left")
-        ttk.Button(bar, text="Bağlantıyı Kes", command=self._disconnect).pack(side="right")
+        self.root.title(f"rdpctl — {self.vars['host'].get()} bağlı")
+        try:
+            self.root.geometry("1200x780")
+        except tk.TclError:
+            pass
 
-        self.canvas = tk.Canvas(self.root, bg="black", highlightthickness=0,
+        bar = tk.Frame(self.root, bg=THEME.surface, padx=16, pady=8,
+                       highlightbackground=THEME.border, highlightthickness=1)
+        bar.pack(fill="x")
+        ui.PulseDot(bar, color=THEME.success, size=16, bg=THEME.surface).pack(side="left")
+        tk.Label(bar, text=f"  Bağlı: {self._value('host')}", bg=THEME.surface, fg=THEME.text,
+                 font=f(11, "bold")).pack(side="left")
+        tk.Label(bar, text=f"   {self._remote_w}×{self._remote_h}   •   {self.identity.full_name}",
+                 bg=THEME.surface, fg=THEME.text_muted, font=f(9)).pack(side="left")
+        chip = tk.Label(bar, text="🔒 Şifreli bağlantı", bg=THEME.success_soft, fg=THEME.success,
+                        font=f(9, "bold"), padx=10, pady=3)
+        chip.pack(side="left", padx=14)
+        ui.RoundedButton(bar, "Bağlantıyı Kes", self._disconnect, kind="danger", icon="⏻",
+                         width=160, height=36, bg=THEME.surface).pack(side="right")
+
+        self.canvas = tk.Canvas(self.root, bg=THEME.bg, highlightthickness=0,
                                 width=1000, height=640)
         self.canvas.pack(fill="both", expand=True)
         self.canvas.focus_set()
+        self.canvas.create_text(500, 320, text="Ekran görüntüsü bekleniyor…",
+                                fill=THEME.text_muted, font=f(12), tags="wait")
 
         self.canvas.bind("<Motion>", self._on_move)
         self.canvas.bind("<ButtonPress>", lambda e: self._on_click(e, True))
@@ -183,6 +323,7 @@ class ControllerApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self._disconnect)
         self.root.after(30, self._render_loop)
+        ui.Toast.show(self.root, "✓ Bağlantı onaylandı — şifreli oturum başladı")
 
     def _recv_loop(self) -> None:
         try:
@@ -222,7 +363,7 @@ class ControllerApp:
             self._disp_w, self._disp_h = dw, dh
             self._frame_w, self._frame_h = w, h
             self._photo = ImageTk.PhotoImage(img)
-            self.canvas.delete("all")
+            self.canvas.delete("all")  # bekleme yazısı dahil
             self._offx = (cw - dw) // 2
             self._offy = (ch - dh) // 2
             self.canvas.create_image(self._offx, self._offy, anchor="nw", image=self._photo)

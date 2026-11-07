@@ -12,6 +12,15 @@ başındaki kişinin açık izniyle**.
 > kaydedilir. Birinin haberi/izni olmadan bilgisayarını izlemek veya kontrol
 > etmek çoğu ülkede suçtur.
 
+## Arayüz
+
+Koyu, modern ve güven veren bir tasarım: degrade başlıklar, hover'da
+yükselen kartlar, yumuşak renk geçişli yuvarlatılmış butonlar, nabız gibi
+atan canlı durum göstergesi, bağlanırken dönen spinner, beliren oturum kodu
+animasyonu, geri sayım çubuklu onay penceresi, "Kod kopyalandı" bildirimleri
+ve kontrol sırasında ekranın üstünde "Sonlandır" butonlu uyarı bandı.
+Tasarım sistemi `rdpctl/ui.py` içindedir (ek bağımlılık yok, saf Tkinter).
+
 ## Güvenlik özellikleri
 
 | Özellik | Açıklama |
@@ -111,6 +120,7 @@ rdpctl/
   host.py       Kontrol edilen makine ajanı (onay + banner + yayın + enjeksiyon)
   controller.py Kontrol eden istemci (giriş + görüntüleme + girdi gönderimi)
   app.py        Birleşik masaüstü başlatıcı (rol seçim ekranı)
+  ui.py         Tasarım sistemi (tema, animasyonlu bileşenler)
 packaging/
   rdpctl.spec       PyInstaller tanımı (tek-dosya, penceresiz)
   build_windows.bat Windows için rdpctl.exe üretir
