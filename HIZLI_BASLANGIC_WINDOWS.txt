@@ -1,0 +1,61 @@
+================================================================
+  rdpctl - Windows Hizli Baslangic
+================================================================
+
+AMAC: rdpctl.exe dosyasini olusturmak, sonra iki bilgisayarda
+      calistirip birbirine baglanmak.
+
+----------------------------------------------------------------
+ADIM 1 - Python kur (yalnizca EXE'yi URETEN bilgisayarda, bir kez)
+----------------------------------------------------------------
+  * https://www.python.org/downloads/ adresinden Python 3.10+ indir.
+  * Kurulum ekraninda "Add python.exe to PATH" kutusunu ISARETLE.
+  * Kurulumu bitir.
+
+----------------------------------------------------------------
+ADIM 2 - EXE olustur
+----------------------------------------------------------------
+  * Bu klasordeki  packaging\build_windows.bat  dosyasina CIFT TIKLA.
+  * Betik gerekli parcalari internetten kurar ve paketler.
+  * Bitince  dist\rdpctl.exe  olusur ve klasor acilir.
+
+  NOT: rdpctl.exe tek dosyadir. Artik Python gerekmez; bu dosyayi
+       istediginiz Windows bilgisayara kopyalayip calistirabilirsiniz.
+
+----------------------------------------------------------------
+ADIM 3 - Iki bilgisayarda calistir ve baglan
+----------------------------------------------------------------
+  rdpctl.exe'yi her iki bilgisayara da kopyalayin.
+
+  A) Kontrol EDILECEK bilgisayarda rdpctl.exe'yi ac:
+       -> "Bu bilgisayari paylas (Host)" sec.
+       -> Ekrandaki OTURUM KODU ve IP adresini not al.
+
+  B) Kontrol EDEN bilgisayarda rdpctl.exe'yi ac:
+       -> "Baska bilgisayara baglan (Controller)" sec.
+       -> Ad, Soyad, karsi bilgisayarin IP'si ve oturum kodunu gir.
+       -> "Baglan"a bas.
+
+  C) Kontrol edilen bilgisayarda onay penceresi cikar.
+     "Kabul Et" denince kontrol baslar; ekranda kirmizi uyari
+     bandi gorunur ve tum islemler kaydedilir.
+
+----------------------------------------------------------------
+AG NOTU
+----------------------------------------------------------------
+  * Ayni ev/ofis aginda iseniz host'un yerel IP'si (orn. 192.168.1.50)
+    yeterlidir. IP'yi ogrenmek icin host bilgisayarda komut istemine
+    "ipconfig" yazip "IPv4 Address" satirina bakin.
+  * Internet uzerinden baglanilacaksa host'un modeminde 7443 portunun
+    host bilgisayara yonlendirilmesi (port forwarding) gerekir.
+  * Windows Guvenlik Duvari ilk calistirmada izin isteyebilir; "Izin ver"
+    deyin.
+
+----------------------------------------------------------------
+GUVENLIK
+----------------------------------------------------------------
+  * Baglanti onaysiz BASLAMAZ; kontrol edilen kisi her zaman gorur.
+  * Oturum kodunu yalnizca guvendiginiz kisiyle paylasin.
+  * Tum girdiler ve dosya degisiklikleri  %USERPROFILE%\.rdpctl\audit.log
+    dosyasina kaydedilir.
+================================================================
