@@ -68,6 +68,15 @@ echo   %cd%\dist\rdpctl.exe          ^(uygulama^)
 echo   %cd%\dist\rdpctl-kaldir.exe   ^(kaldirici^)
 echo ============================================================
 echo.
+echo SHA-256 ozetleri ^(karsi tarafla paylasip dogrulatabilirsiniz^):
+for %%F in ("dist\rdpctl.exe" "dist\rdpctl-kaldir.exe") do (
+    if exist %%F certutil -hashfile %%F SHA256 | findstr /v ":"
+)
+echo.
+echo NOT: Windows "bilinmeyen yayimci/virus" uyarisi verebilir. Bu bir
+echo      YANLIS POZITIF'tir. Kalici cozum kod imzalamadir; ayrintilar:
+echo      VIRUS_UYARISI_COZUM.md
+echo.
 echo rdpctl.exe tek dosyadir; istediginiz bilgisayara kopyalayip
 echo cift tiklayarak calistirabilirsiniz ^(Python gerekmez^).
 echo.

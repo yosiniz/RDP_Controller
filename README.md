@@ -43,6 +43,12 @@ rolünü seçer:
 - Kontrol **edilecek** bilgisayar → "🖥 Bu bilgisayarı paylaş (Host)"
 - Kontrol **eden** bilgisayar → "🔌 Başka bilgisayara bağlan (Controller)"
 
+> **"Virüs" / "bilinmeyen yayımcı" uyarısı mı alıyorsunuz?** Bu, imzasız
+> PyInstaller dosyalarında çok yaygın bir **yanlış pozitiftir**. Kalıcı çözüm
+> (kod imzalama) ve tüm diğer adımlar için **[VIRUS_UYARISI_COZUM.md](VIRUS_UYARISI_COZUM.md)**
+> dosyasına bakın. Derleme ayarları (UPX kapalı, sürüm bilgisi) bunu azaltmak
+> için zaten düzenlendi; `set RDPCTL_ONEDIR=1` ile klasör dağıtımı da üretebilirsiniz.
+
 ### 1) Kurulum gerektirmeyen tek-dosya uygulamayı üretin
 
 Her bilgisayarda **kendi işletim sistemine ait** betiği çalıştırın (tek
@@ -154,6 +160,8 @@ rdpctl/
 packaging/
   rdpctl.spec       PyInstaller tanımı (tek-dosya, penceresiz)
   rdpctl-kaldir.spec PyInstaller tanımı (kaldırıcı)
+  version_app.txt / version_uninstall.txt  Windows sürüm bilgisi
+  sign_windows.ps1  Kod imzalama yardımcısı (signtool)
   build_windows.bat Windows için rdpctl.exe + rdpctl-kaldir.exe üretir
   build_macos.sh    macOS için rdpctl.app üretir
   build_linux.sh    Linux için rdpctl ikili dosyası üretir

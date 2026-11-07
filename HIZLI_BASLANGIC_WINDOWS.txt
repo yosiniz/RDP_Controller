@@ -42,6 +42,15 @@ ADIM 3 - Iki bilgisayarda calistir ve baglan
      bandi gorunur ve tum islemler kaydedilir.
 
 ----------------------------------------------------------------
+"VIRUS" / "BILINMEYEN YAYIMCI" UYARISI
+----------------------------------------------------------------
+  * Bu bir YANLIS POZITIF'tir (imzasiz PyInstaller dosyalarinda yaygin).
+  * Gecici: SmartScreen uyarisinda "Ek bilgi" -> "Yine de calistir".
+    Ya da dosyaya sag tik -> Ozellikler -> "Engeli Kaldir" (Unblock).
+    Bunu YALNIZCA dosyayi guvendiginiz kaynaktan aldiginizda yapin.
+  * Kalici cozum: kod imzalama. Ayrintilar -> VIRUS_UYARISI_COZUM.md
+
+----------------------------------------------------------------
 KALDIRMA (eski surumleri temizlemek icin)
 ----------------------------------------------------------------
   * dist\rdpctl-kaldir.exe dosyasina cift tikla.
