@@ -165,9 +165,13 @@ rdpctl/
   controller.py Kontrol eden istemci (giriş + görüntüleme + girdi gönderimi)
   app.py        Birleşik masaüstü başlatıcı (rol seçim ekranı)
   ui.py         Tasarım sistemi (tema, animasyonlu bileşenler)
+  relay.py      Buluşma/aktarma sunucusu (saf stdlib, zero-trust)
+  config.py     Relay adresi yapılandırması (ortam değişkeni / gömülü)
   uninstall.py  Kaldırıcı mantığı (tarama, yedekleme, silme, CLI)
   uninstall_gui.py Kaldırıcı arayüzü
 packaging/
+  relay.Dockerfile  Relay sunucusu imajı (bağımlılıksız)
+  embed_relay.py    Derlemede relay adresini config.py'ye gömer
   rdpctl.spec       PyInstaller tanımı (tek-dosya, penceresiz)
   rdpctl-kaldir.spec PyInstaller tanımı (kaldırıcı)
   version_app.txt / version_uninstall.txt  Windows sürüm bilgisi
@@ -176,8 +180,24 @@ packaging/
   build_macos.sh    macOS için rdpctl.app üretir
   build_linux.sh    Linux için rdpctl ikili dosyası üretir
 run_app.py      Masaüstü uygulaması giriş noktası (rol seçimi)
+run_relay.py    Relay sunucusu giriş noktası (geliştirici tarafı)
 run_uninstall.py Kaldırıcı giriş noktası
 ```
+
+## İnternet üzerinden bağlantı (relay) — IP/port gerekmez
+
+Varsayılan uygulama yerel ağda **doğrudan IP** ile bağlanır. İki bilgisayar
+**farklı internetlerdeyken** (AnyDesk gibi) çalışması için bir **relay
+(buluşma) sunucusu** eklenmiştir: her iki taraf da dışarı doğru relay'e
+bağlanır, relay onları **oturum koduyla** eşleştirir ve baytları aktarır.
+Son kullanıcı **IP girmez, port açmaz**; sadece kodu paylaşır.
+
+- **Güvenlik:** Relay trafiği göremez — uçtan uca TLS host↔controller
+  arasında, relay tünelinin içinden kurulur (zero-trust aktarıcı).
+- **Etkinleştirme (geliştirici):** Relay'i bir sunucuda bir kez çalıştırın
+  ve derlerken `RDPCTL_RELAY_HOST` ortam değişkenini/repository variable'ını
+  verin. Adım adım: **[RELAY_KURULUM.md](RELAY_KURULUM.md)**.
+- Relay adresi verilmezse uygulama eski doğrudan-IP davranışını sürdürür.
 
 Tel protokolü: her mesaj `[4 bayt big-endian uzunluk][UTF-8 JSON gövde]`.
 Ekran kareleri JPEG olarak base64 ile JSON içinde taşınır; taşıma TLS olduğu

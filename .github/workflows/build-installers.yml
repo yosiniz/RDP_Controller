@@ -40,6 +40,9 @@ jobs:
           python -m pip install --upgrade pip pyinstaller
           python -m pip install -r requirements.txt
 
+      - name: Relay adresini goml (varsa)
+        run: python packaging/embed_relay.py
+
       - name: Uygulamayi ve kaldiriciyi paketle
         run: |
           pyinstaller --noconfirm packaging/rdpctl.spec
@@ -98,6 +101,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip pyinstaller
           python -m pip install -r requirements.txt
+
+      - name: Relay adresini goml (varsa)
+        run: python packaging/embed_relay.py
 
       - name: Uygulamayi ve kaldiriciyi paketle
         run: |

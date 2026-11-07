@@ -16,6 +16,7 @@ import tkinter as tk
 from tkinter import messagebox
 from typing import Optional
 
+from . import config
 from . import protocol as proto
 from . import ui
 from .ui import THEME, f, mix
@@ -25,6 +26,13 @@ from .auth import Identity
 class ControllerApp:
     def __init__(self, args):
         self.args = args
+        relay_host = getattr(args, "relay_host", None)
+        if relay_host is None:
+            relay_host = config.DEFAULT_RELAY_HOST
+        self.relay_host = relay_host
+        self.relay_port = getattr(args, "relay_port", None) or config.DEFAULT_RELAY_PORT
+        self.relay_mode = bool(relay_host) and not getattr(args, "no_relay", False)
+        self._peer_label = ""
         self.sock: Optional[socket.socket] = None
         self.identity: Optional[Identity] = None
         self._frame_q: "queue.Queue" = queue.Queue(maxsize=2)
@@ -100,10 +108,16 @@ class ControllerApp:
         }
         first = self._field(card, "Ad", "first", 2, 0)
         self._field(card, "Soyad", "last", 2, 1)
-        self._field(card, "Bilgisayar adresi (IP)", "host", 4, 0, placeholder="192.168.1.50")
-        self._field(card, "Port", "port", 4, 1, width=8)
-        code_e = self._field(card, "Oturum kodu", "code", 6, 0, colspan=2, big=True,
-                             placeholder="123-456-789")
+        if self.relay_mode:
+            # IP/port GEREKMEZ — sadece oturum kodu.
+            code_e = self._field(card, "Oturum kodu", "code", 4, 0, colspan=2, big=True,
+                                 placeholder="123-456-789")
+        else:
+            self._field(card, "Bilgisayar adresi (IP)", "host", 4, 0,
+                        placeholder="192.168.1.50")
+            self._field(card, "Port", "port", 4, 1, width=8)
+            code_e = self._field(card, "Oturum kodu", "code", 6, 0, colspan=2, big=True,
+                                 placeholder="123-456-789")
         code_e.bind("<Return>", lambda e: self._do_connect())
 
         self.connect_btn = ui.RoundedButton(card, "Güvenli Bağlan", self._do_connect,
@@ -189,16 +203,21 @@ class ControllerApp:
         except ValueError as exc:
             self._login_fail(str(exc))
             return
-        host = self._value("host").strip()
-        if not proto.is_valid_host(host):
-            self._login_fail("Geçerli bir bilgisayar adresi girin.")
-            return
-        try:
-            port = int(self.vars["port"].get())
-            assert 1 <= port <= 65535
-        except (ValueError, AssertionError):
-            self._login_fail("Geçersiz port.")
-            return
+        if self.relay_mode:
+            host, port = None, None
+            self._peer_label = "İnternet (kod ile)"
+        else:
+            host = self._value("host").strip()
+            if not proto.is_valid_host(host):
+                self._login_fail("Geçerli bir bilgisayar adresi girin.")
+                return
+            try:
+                port = int(self.vars["port"].get())
+                assert 1 <= port <= 65535
+            except (ValueError, AssertionError):
+                self._login_fail("Geçersiz port.")
+                return
+            self._peer_label = host
         self.identity = identity
         self.connect_btn.configure(state="disabled")
         self.login_status.configure(text="Güvenli bağlantı kuruluyor…", fg=THEME.text_muted)
@@ -206,9 +225,14 @@ class ControllerApp:
         threading.Thread(target=self._connect_worker,
                          args=(host, port, self._value("code")), daemon=True).start()
 
-    def _connect_worker(self, host: str, port: int, code: str) -> None:
+    def _connect_worker(self, host, port, code: str) -> None:
         try:
-            raw = socket.create_connection((host, port), timeout=15)
+            if self.relay_mode:
+                self._login_status_async("Buluşma sunucusuna bağlanılıyor…")
+                raw = proto.connect_via_relay(
+                    self.relay_host, self.relay_port, "controller", code, timeout=25)
+            else:
+                raw = socket.create_connection((host, port), timeout=15)
             ctx = proto.client_tls_context()
             conn = ctx.wrap_socket(raw, server_hostname="rdpctl-host")
             import ssl as _ssl
@@ -217,6 +241,15 @@ class ControllerApp:
                 proto.cert_fingerprint(_ssl.DER_cert_to_PEM_cert(der).encode())
                 if der else ""
             )
+        except proto.RelayError as exc:
+            msg = {
+                "not_found": "Karşı taraf henüz paylaşımı başlatmadı ya da kod yanlış.",
+                "relay_unreachable": "Buluşma sunucusuna ulaşılamadı. İnternetinizi kontrol edin.",
+                "timeout": "Eşleşme zaman aşımına uğradı. Tekrar deneyin.",
+                "code_in_use": "Bu kod şu an kullanılıyor.",
+            }.get(exc.reason, f"Bağlantı kurulamadı ({exc.reason}).")
+            self._login_fail(msg)
+            return
         except Exception as exc:
             self._login_fail(f"Bağlantı kurulamadı: {exc}")
             return
@@ -285,7 +318,8 @@ class ControllerApp:
     def _build_viewer(self) -> None:
         self._spinner.stop()
         self._login.destroy()
-        self.root.title(f"rdpctl — {self.vars['host'].get()} bağlı")
+        peer = self._peer_label or "uzak bilgisayar"
+        self.root.title(f"rdpctl — {peer} bağlı")
         try:
             self.root.geometry("1200x780")
         except tk.TclError:
@@ -295,8 +329,8 @@ class ControllerApp:
                        highlightbackground=THEME.border, highlightthickness=1)
         bar.pack(fill="x")
         ui.PulseDot(bar, color=THEME.success, size=16, bg=THEME.surface).pack(side="left")
-        tk.Label(bar, text=f"  Bağlı: {self._value('host')}", bg=THEME.surface, fg=THEME.text,
-                 font=f(11, "bold")).pack(side="left")
+        tk.Label(bar, text=f"  Bağlı: {self._peer_label or 'uzak bilgisayar'}",
+                 bg=THEME.surface, fg=THEME.text, font=f(11, "bold")).pack(side="left")
         tk.Label(bar, text=f"   {self._remote_w}×{self._remote_h}   •   {self.identity.full_name}",
                  bg=THEME.surface, fg=THEME.text_muted, font=f(9)).pack(side="left")
         chip = tk.Label(bar, text="🔒 Şifreli bağlantı", bg=THEME.success_soft, fg=THEME.success,
@@ -469,10 +503,15 @@ class ControllerApp:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="rdpctl controller — kontrol eden istemci")
-    p.add_argument("--host", help="host adresi")
+    p.add_argument("--host", help="host adresi (relay kapalıysa)")
     p.add_argument("--port", type=int, default=7443)
     p.add_argument("--first-name", help="ad (giriş formunu ön-doldurur)")
     p.add_argument("--last-name", help="soyad")
+    p.add_argument("--relay-host", default=None,
+                   help="buluşma sunucusu adresi (boş = config/ortam değişkeni)")
+    p.add_argument("--relay-port", type=int, default=None, help="buluşma sunucusu portu")
+    p.add_argument("--no-relay", action="store_true",
+                   help="relay yapılandırılmış olsa bile doğrudan IP ile bağlan")
     return p
 
 

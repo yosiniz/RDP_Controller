@@ -22,6 +22,7 @@ import time
 import tkinter as tk
 from typing import Optional
 
+from . import config
 from . import protocol as proto
 from . import ui
 from .ui import THEME, f, mix
@@ -207,7 +208,16 @@ class HostApp:
         self._current: Optional[_Session] = None
         self._watcher: Optional[FileChangeWatcher] = None
         self._server_sock: Optional[socket.socket] = None
+        self._relay_sock: Optional[socket.socket] = None
         self._stopping = threading.Event()
+
+        # Relay (buluşma) modu: IP/port gerekmeden, sadece kodla bağlantı.
+        relay_host = getattr(args, "relay_host", None)
+        if relay_host is None:
+            relay_host = config.DEFAULT_RELAY_HOST
+        self.relay_host = relay_host
+        self.relay_port = getattr(args, "relay_port", None) or config.DEFAULT_RELAY_PORT
+        self.relay_mode = bool(relay_host) and not getattr(args, "no_relay", False)
 
         # TLS sertifikası
         cfgdir = os.path.join(os.path.expanduser("~"), ".rdpctl")
@@ -278,13 +288,24 @@ class HostApp:
         # --- Bağlantı bilgileri kartı ---
         info = self._card(body)
         info.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
-        tk.Label(info, text="BAĞLANTI ADRESİ", bg=THEME.surface, fg=THEME.text_muted,
-                 font=f(9, "bold")).pack(anchor="w")
-        for ip in _local_ips():
-            tk.Label(info, text=f"{ip}", bg=THEME.surface, fg=THEME.text,
-                     font=f(15, "bold")).pack(anchor="w", pady=(4, 0))
-        tk.Label(info, text=f"Port: {self.listen_port}", bg=THEME.surface,
-                 fg=THEME.text_muted, font=f(10)).pack(anchor="w", pady=(2, 12))
+        if self.relay_mode:
+            tk.Label(info, text="NASIL BAĞLANILIR", bg=THEME.surface, fg=THEME.text_muted,
+                     font=f(9, "bold")).pack(anchor="w")
+            tk.Label(info, text="🌐 İnternet üzerinden hazır", bg=THEME.surface,
+                     fg=THEME.success, font=f(13, "bold")).pack(anchor="w", pady=(4, 2))
+            tk.Label(info, bg=THEME.surface, fg=THEME.text_muted, font=f(9),
+                     justify="left", wraplength=240,
+                     text="IP veya port GEREKMEZ. Karşı tarafa sadece\n"
+                          "oturum kodunu verin; aynı ağda olmanıza\n"
+                          "gerek yok.").pack(anchor="w", pady=(0, 12))
+        else:
+            tk.Label(info, text="BAĞLANTI ADRESİ", bg=THEME.surface, fg=THEME.text_muted,
+                     font=f(9, "bold")).pack(anchor="w")
+            for ip in _local_ips():
+                tk.Label(info, text=f"{ip}", bg=THEME.surface, fg=THEME.text,
+                         font=f(15, "bold")).pack(anchor="w", pady=(4, 0))
+            tk.Label(info, text=f"Port: {self.listen_port}", bg=THEME.surface,
+                     fg=THEME.text_muted, font=f(10)).pack(anchor="w", pady=(2, 12))
         tk.Label(info, text="🔒 TLS parmak izi", bg=THEME.surface, fg=THEME.text_muted,
                  font=f(9, "bold")).pack(anchor="w")
         short_fp = " ".join(self.fingerprint.split(":")[:8]) + " …"
@@ -532,7 +553,10 @@ class HostApp:
 
     # --- Sunucu ------------------------------------------------------------
     def start(self) -> None:
-        threading.Thread(target=self._serve, daemon=True).start()
+        if self.relay_mode:
+            threading.Thread(target=self._serve_relay, daemon=True).start()
+        else:
+            threading.Thread(target=self._serve, daemon=True).start()
         self.root.mainloop()
 
     def _serve(self) -> None:
@@ -547,11 +571,48 @@ class HostApp:
                 client, addr = raw.accept()
             except OSError:
                 break
-            threading.Thread(target=self._handle_client, args=(ctx, client, addr),
+            threading.Thread(target=self._handle_client, args=(ctx, client, addr[0]),
                              daemon=True).start()
 
-    def _handle_client(self, ctx, client, addr) -> None:
-        ip = addr[0]
+    def _serve_relay(self) -> None:
+        """Relay modu: host, buluşma sunucusuna DIŞARI bağlanır ve kodla
+        eşleşmeyi bekler. Eşleşince gelen baytları TLS SUNUCU olarak sarıp
+        normal oturum akışını işler. Oturum bitince yeniden kaydolur."""
+        ctx = proto.server_tls_context(self.cert_path, self.key_path)
+        backoff = 2
+        while not self._stopping.is_set():
+            self._gui_queue.put(("status",
+                                 ("İnternet üzerinden bağlantı bekleniyor…", "waiting")))
+            try:
+                raw = proto.connect_via_relay(
+                    self.relay_host, self.relay_port, "host",
+                    self.session_code, timeout=20)
+            except proto.RelayError as exc:
+                if exc.reason == "timeout":
+                    continue  # kimse gelmedi; hemen yeniden kaydol
+                if exc.reason == "code_in_use":
+                    self._gui_queue.put(("status",
+                                         ("Bu kod başka bir oturumda kullanılıyor",
+                                          "waiting")))
+                    self.audit.log("relay_error", reason="code_in_use")
+                # relay_unreachable / diğer: üstel geri çekilmeyle yeniden dene
+                if self._stopping.wait(backoff):
+                    break
+                backoff = min(backoff * 2, 30)
+                continue
+            except Exception as exc:
+                self.audit.log("relay_error", detail=str(exc))
+                if self._stopping.wait(backoff):
+                    break
+                backoff = min(backoff * 2, 30)
+                continue
+            backoff = 2
+            self._relay_sock = raw
+            # Eşleşti: TLS sunucu el sıkışması + oturum akışı (ip gizli -> "internet")
+            self._handle_client(ctx, raw, "internet")
+            self._relay_sock = None
+
+    def _handle_client(self, ctx, client, ip) -> None:
         try:
             conn = ctx.wrap_socket(client, server_side=True)
         except ssl_error():
@@ -640,11 +701,12 @@ class HostApp:
         self._stopping.set()
         if self._current is not None:
             self._current.stop(reason="host_shutdown")
-        if self._server_sock is not None:
-            try:
-                self._server_sock.close()
-            except OSError:
-                pass
+        for sock in (self._server_sock, self._relay_sock):
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
         self.root.destroy()
 
 
@@ -682,6 +744,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quality", type=int, default=60, help="JPEG kalitesi 1-95")
     p.add_argument("--watch", action="append", help="izlenecek klasör (çoklu verilebilir)")
     p.add_argument("--audit", help="denetim günlüğü yolu")
+    p.add_argument("--relay-host", default=None,
+                   help="buluşma sunucusu adresi (boş = config/ortam değişkeni)")
+    p.add_argument("--relay-port", type=int, default=None, help="buluşma sunucusu portu")
+    p.add_argument("--no-relay", action="store_true",
+                   help="relay yapılandırılmış olsa bile yerel port dinle")
     return p
 
 

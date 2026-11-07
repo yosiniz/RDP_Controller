@@ -53,6 +53,54 @@ def recv_msg(sock: socket.socket) -> Dict[str, Any]:
     return json.loads(_recv_exact(sock, length).decode("utf-8"))
 
 
+# --- Relay (buluşma) istemcisi --------------------------------------------
+class RelayError(Exception):
+    """Relay eşleştirme hatası. `reason` alanı makine-okunur sebebi taşır."""
+
+    def __init__(self, reason: str, message: str = ""):
+        self.reason = reason
+        super().__init__(message or reason)
+
+
+def connect_via_relay(relay_host: str, relay_port: int, role: str, code: str,
+                      timeout: float = 20.0) -> socket.socket:
+    """Relay'e bağlanıp eşleşmeyi bekler; eşleşince ÇIPLAK TCP soketi döner.
+
+    Dönen soket SONRADAN TLS ile sarılır (host: server_side, controller:
+    client). Böylece uçtan uca şifreleme relay'den bağımsız kurulur.
+
+    role: "host" | "controller". Eşleşme olmazsa RelayError(reason) fırlatır:
+      - not_found   : (controller) o kodla bekleyen host yok
+      - code_in_use : (host) aynı kod zaten kullanılıyor
+      - timeout     : eşleşme süresi doldu
+    """
+    if role not in ("host", "controller"):
+        raise ValueError("role 'host' veya 'controller' olmalı")
+    raw = socket.create_connection((relay_host, relay_port), timeout=timeout)
+    try:
+        send_msg(raw, {"type": "register", "role": role, "code": code})
+        # host, controller gelene kadar bekleyebilir; makul bir üst sınır ver.
+        raw.settimeout(None if role == "host" else timeout)
+        reply = recv_msg(raw)
+    except (OSError, ConnectionError, ValueError) as exc:
+        try:
+            raw.close()
+        except OSError:
+            pass
+        raise RelayError("relay_unreachable", f"relay'e ulaşılamadı: {exc}")
+    t = reply.get("type")
+    if t == "paired":
+        raw.settimeout(None)
+        return raw
+    try:
+        raw.close()
+    except OSError:
+        pass
+    if t == "error":
+        raise RelayError(reply.get("reason", "unknown"))
+    raise RelayError("unexpected", f"beklenmeyen relay yanıtı: {reply!r}")
+
+
 # --- TLS -------------------------------------------------------------------
 
 def generate_self_signed_cert(cert_path: str, key_path: str) -> str:
