@@ -66,3 +66,19 @@ exe = EXE(
     version=VERSION_FILE,
 )
 
+
+if ONEDIR and not sys.platform == 'darwin':
+    coll = COLLECT(
+        exe, a.binaries, a.zipfiles, a.datas,
+        strip=False, upx=USE_UPX, upx_exclude=[], name='rdpctl-kaldir',
+    )
+
+# macOS için .app paketi (çift tıkla açılır)
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        exe,
+        name='rdpctl-kaldir.app',
+        icon=None,
+        bundle_identifier='com.rdpctl.uninstall',
+        info_plist={'NSHighResolutionCapable': 'True'},
+    )

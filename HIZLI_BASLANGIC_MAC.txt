@@ -1,0 +1,62 @@
+================================================================
+  rdpctl - macOS Hizli Baslangic
+================================================================
+
+NOT: Hazir .app'i GitHub'da GERCEK bir Mac'te derliyoruz; indirip
+     calistirman yeterli, Python/derleme GEREKMEZ.
+
+----------------------------------------------------------------
+ADIM 1 - Dogru surumu indir
+----------------------------------------------------------------
+  GitHub -> deponun "Actions" sekmesi -> "macOS Uygulamasi Derle"
+  -> en son calisma -> en altta "Artifacts":
+
+    * Apple Silicon (M1/M2/M3/M4 Mac)  -> rdpctl-macos-apple-silicon
+    * Intel islemcili Mac              -> rdpctl-macos-intel
+
+  Hangi Mac'e sahip oldugunu bilmiyorsan:
+    Sol ust Apple menusu -> "Bu Mac Hakkinda".
+    "Yonga: Apple M.." yaziyorsa Apple Silicon; "Islemci: Intel" ise Intel.
+
+  Inen .zip'i ac; icinden rdpctl.app cikar (ve rdpctl-kaldir.app).
+
+----------------------------------------------------------------
+ADIM 2 - Ilk acilista Gatekeeper uyarisini gec
+----------------------------------------------------------------
+  Uygulama imzasiz oldugu icin macOS "tanimlanamayan gelistirici"
+  uyarisi verebilir. BU NORMAL (imzasiz uygulamalarda olagan).
+
+  rdpctl.app'e CIFT TIKLAMAK YERINE:
+    * rdpctl.app uzerine SAG TIK (veya Control+tik) -> "Ac" -> tekrar "Ac".
+  Bir kez boyle actiktan sonra normal cift tikla acilir.
+
+  Alternatif (Terminal): indirdigin klasorde
+    xattr -dr com.apple.quarantine rdpctl.app
+
+----------------------------------------------------------------
+ADIM 3 - Izinleri ver (kontrol EDILECEK Mac'te)
+----------------------------------------------------------------
+  Ekran paylasimi ve fare/klavye icin macOS izin ister:
+    Sistem Ayarlari -> Gizlilik ve Guvenlik ->
+      * Ekran ve Ses Kaydi (Screen Recording): rdpctl'i ekle/isaretle
+      * Erisilebilirlik (Accessibility):       rdpctl'i ekle/isaretle
+  Izin verdikten sonra uygulamayi kapatip tekrar ac.
+
+----------------------------------------------------------------
+ADIM 4 - Kullan
+----------------------------------------------------------------
+  * Kontrol EDILECEK Mac'te ac -> "Bilgisayarimi Paylas" -> kod + IP goster.
+  * Kontrol EDEN cihazda ac -> "Uzak Bilgisayara Baglan" ->
+    ad, soyad, IP ve kodu gir -> Baglan.
+  * Paylasilan Mac'te onay penceresi cikar; "Izin Ver" deyince baslar.
+
+  IP ogrenme (paylasilan Mac): Sistem Ayarlari -> Ag -> aktif baglanti
+  -> Ayrintilar -> "IP Adresi". Ayni ev agindaysaniz bu adres yeterli.
+
+----------------------------------------------------------------
+KALDIRMA
+----------------------------------------------------------------
+  rdpctl-kaldir.app'i ac; eski kopyalari, ayarlari (~/.rdpctl) ve
+  gunlukleri listeler, onayinla temizler (gunlukler once Masaustune
+  yedeklenir).
+================================================================

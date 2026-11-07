@@ -37,6 +37,16 @@ Tasarım sistemi `rdpctl/ui.py` içindedir (ek bağımlılık yok, saf Tkinter).
 
 ## Masaüstü uygulaması olarak kurulum (önerilen)
 
+### macOS için hazır .app (derlemeye gerek yok)
+
+GitHub Actions, her kod gönderiminde `rdpctl.app`'i **gerçek macOS
+sunucularında** (hem Apple Silicon hem Intel) derler. Deponun **Actions**
+sekmesi → "macOS Uygulamasi Derle" → en son çalışma → **Artifacts**:
+`rdpctl-macos-apple-silicon` veya `rdpctl-macos-intel`. Adım adım kurulum
+ve Gatekeeper/izin notları: **[HIZLI_BASLANGIC_MAC.txt](HIZLI_BASLANGIC_MAC.txt)**.
+
+
+
 Aynı uygulamayı **iki bilgisayara da** kurarsınız. Açılışta her bilgisayar
 rolünü seçer:
 
