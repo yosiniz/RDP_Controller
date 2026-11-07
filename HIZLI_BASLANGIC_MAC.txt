@@ -2,6 +2,12 @@
   rdpctl - macOS Hizli Baslangic
 ================================================================
 
+ONKOSUL (yerelde derleyecekseniz): Python 3.10 veya uzeri gerekir.
+  macOS/Xcode'un kendi Python 3.9'u YETMEZ (pyobjc derlenemiyor).
+  Python 3.12 kurmak icin:  https://www.python.org/downloads/macos/
+  (Homebrew varsa:  brew install python@3.12)
+  Hazir .app'i GitHub'dan indirirseniz Python'a hic gerek yoktur.
+
 NOT: Hazir .app'i GitHub'da GERCEK bir Mac'te derliyoruz; indirip
      calistirman yeterli, Python/derleme GEREKMEZ.
 

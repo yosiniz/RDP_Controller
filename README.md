@@ -67,7 +67,7 @@ seferlik; Python ve derleme araçları yalnızca üreten makinede gerekir):
 | İşletim sistemi | Komut | Çıktı |
 |---|---|---|
 | **Windows** | `packaging\build_windows.bat` (çift tık) | `dist\rdpctl.exe` |
-| **macOS** | `bash packaging/build_macos.sh` | `dist/rdpctl.app` |
+| **macOS** | `bash packaging/build_macos.sh` (Python 3.10+ gerekir) | `dist/rdpctl.app` |
 | **Linux** | `bash packaging/build_linux.sh` | `dist/rdpctl` |
 
 Oluşan dosyayı (`rdpctl.exe` / `rdpctl.app` / `rdpctl`) ilgili bilgisayara
