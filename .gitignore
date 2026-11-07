@@ -4,3 +4,8 @@ __pycache__/
 *.log
 *.pem
 .venv/
+
+# PyInstaller çıktıları (her makinede yerel üretilir)
+build/
+dist/
+*.spec.bak

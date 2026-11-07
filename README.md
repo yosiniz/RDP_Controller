@@ -26,42 +26,71 @@ başındaki kişinin açık izniyle**.
 | **Kurcalanamaz denetim günlüğü** | Her kayıt bir öncekinin SHA-256 hash'ini içerir (hash zinciri); sonradan değiştirme tespit edilir. |
 | **Dosya değişikliği kaydı** | Oturum boyunca izlenen klasörlerdeki dosya oluşturma/değiştirme/silme/taşıma olayları kaydedilir. |
 
-## Kurulum
+## Masaüstü uygulaması olarak kurulum (önerilen)
+
+Aynı uygulamayı **iki bilgisayara da** kurarsınız. Açılışta her bilgisayar
+rolünü seçer:
+
+- Kontrol **edilecek** bilgisayar → "🖥 Bu bilgisayarı paylaş (Host)"
+- Kontrol **eden** bilgisayar → "🔌 Başka bilgisayara bağlan (Controller)"
+
+### 1) Kurulum gerektirmeyen tek-dosya uygulamayı üretin
+
+Her bilgisayarda **kendi işletim sistemine ait** betiği çalıştırın (tek
+seferlik; Python ve derleme araçları yalnızca üreten makinede gerekir):
+
+| İşletim sistemi | Komut | Çıktı |
+|---|---|---|
+| **Windows** | `packaging\build_windows.bat` (çift tık) | `dist\rdpctl.exe` |
+| **macOS** | `bash packaging/build_macos.sh` | `dist/rdpctl.app` |
+| **Linux** | `bash packaging/build_linux.sh` | `dist/rdpctl` |
+
+Oluşan dosyayı (`rdpctl.exe` / `rdpctl.app` / `rdpctl`) ilgili bilgisayara
+kopyalayıp **çift tıklamanız yeterli** — ayrı bir Python kurulumu gerekmez.
+
+> **Windows:** `.exe`'yi oluşturmak için önce [python.org](https://www.python.org/downloads/)
+> üzerinden Python 3.10+ kurun (kurulumda "Add to PATH" işaretli olsun).
+> **macOS:** ilk çalıştırmada Sistem Ayarları → Gizlilik ve Güvenlik'ten
+> **Ekran Kaydı** ve **Erişilebilirlik** izinlerini `rdpctl` için açın.
+> **Linux:** X11/Wayland masaüstü ve `python3-tk` paketi gereklidir.
+
+### 2) Bağlanma
+
+1. **Host** bilgisayarda `rdpctl`'i açın → "Bu bilgisayarı paylaş"ı seçin.
+   Pencerede bir **oturum kodu** ve **dinlenen adres** görünür.
+2. Host'un **IP adresini** ve **oturum kodunu** karşı tarafa güvenli bir
+   kanaldan (telefon, şifreli mesaj) iletin.
+3. **Controller** bilgisayarda `rdpctl`'i açın → "Başka bilgisayara bağlan"ı
+   seçin. **Ad, soyad**, host IP'si ve **oturum kodunu** girip "Bağlan"a basın.
+4. Host ekranında onay penceresi çıkar; "Kabul Et" denince kontrol başlar.
+
+> **Ağ:** İki bilgisayar aynı yerel ağdaysa host'un yerel IP'si (ör.
+> `192.168.1.50`) yeterlidir. İnternet üzerinden bağlanılacaksa host'un
+> bulunduğu yönlendiricide **7443** portunun host'a yönlendirilmesi
+> (port forwarding) gerekir.
+
+## Geliştirici modu (paketlemeden çalıştırma)
+
+Python kuruluysa doğrudan da çalıştırabilirsiniz:
 
 ```bash
 pip install -r requirements.txt
+python3 run_app.py              # rol seçim ekranıyla başlar
 ```
 
-> Not: Ekran yakalama ve girdi enjeksiyonu için grafik oturumu (X11/Wayland,
-> Windows masaüstü veya macOS) gerekir. Başsız (headless) sunucuda GUI
-> açılmaz. macOS'ta ayrıca "Erişilebilirlik" ve "Ekran Kaydı" izinleri
-> verilmelidir.
-
-## Kullanım
-
-**Kontrol EDİLEN bilgisayarda (host):**
+İsterseniz rolleri doğrudan da başlatabilirsiniz:
 
 ```bash
-python3 run_host.py
+python3 run_app.py host         # veya: python3 run_host.py
+python3 run_app.py controller   # veya: python3 run_controller.py
 ```
 
-Pencerede görünen **oturum kodunu** karşı tarafa güvenli bir kanaldan iletin.
-
-Seçenekler:
+Host seçenekleri:
 
 ```bash
 python3 run_host.py --port 7443 --fps 10 --max-width 1280 --quality 65 \
     --watch ~/Documents --watch ~/Desktop --audit ~/.rdpctl/audit.log
 ```
-
-**Kontrol EDEN bilgisayarda (controller):**
-
-```bash
-python3 run_controller.py --host 192.168.1.50
-```
-
-Açılan formda **ad, soyad**, host adresi ve **oturum kodunu** girin, "Bağlan"a
-tıklayın. Host onayladığında uzak ekran görüntülenir.
 
 ## Denetim günlüğünü inceleme
 
@@ -81,6 +110,13 @@ rdpctl/
   fswatch.py    Dosya değişikliği izleyici (watchdog)
   host.py       Kontrol edilen makine ajanı (onay + banner + yayın + enjeksiyon)
   controller.py Kontrol eden istemci (giriş + görüntüleme + girdi gönderimi)
+  app.py        Birleşik masaüstü başlatıcı (rol seçim ekranı)
+packaging/
+  rdpctl.spec       PyInstaller tanımı (tek-dosya, penceresiz)
+  build_windows.bat Windows için rdpctl.exe üretir
+  build_macos.sh    macOS için rdpctl.app üretir
+  build_linux.sh    Linux için rdpctl ikili dosyası üretir
+run_app.py      Masaüstü uygulaması giriş noktası (rol seçimi)
 ```
 
 Tel protokolü: her mesaj `[4 bayt big-endian uzunluk][UTF-8 JSON gövde]`.
