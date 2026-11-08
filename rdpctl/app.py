@@ -206,6 +206,9 @@ def _build_update_row(root: tk.Misc) -> None:
     def do_check():
         if state["busy"]:
             return
+        if not version.build_id():
+            set_status("geliştirme sürümü · güncelleme gerekmez", THEME.text_muted)
+            return
         state["busy"] = True
         set_status("denetleniyor…")
 
