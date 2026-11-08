@@ -132,8 +132,9 @@ class _Session:
             self._injector = _InputInjector()
         except Exception as exc:  # girdi enjeksiyonu yoksa yalnızca görüntüleme
             self.host.audit.log("input_unavailable", detail=str(exc))
-        self._grab, _, _ = _screen_grabber()
-
+        # NOT: Ekran yakalayıcı (mss) BURADA değil, _send_frames thread'inin
+        # İÇİNDE oluşturulur. macOS'ta mss bir thread'de oluşturulup başka bir
+        # thread'de kullanılırsa native çökme (segfault) olur.
         sender = threading.Thread(target=self._send_frames, daemon=True)
         sender.start()
         try:
@@ -169,12 +170,21 @@ class _Session:
 
     def _send_frames(self) -> None:
         interval = 1.0 / max(1, self._fps)
+        # Ekran yakalayıcıyı BU thread içinde oluştur (macOS native çökmesini
+        # önler). Başlatılamazsa (ör. ekran kaydı izni yok) çökmek yerine
+        # oturumu düzgünce sonlandır.
+        try:
+            grab, _, _ = _screen_grabber()
+        except Exception as exc:
+            self.host.audit.log("frame_error", detail=f"ekran yakalama başlatılamadı: {exc}")
+            self.stop(reason="capture_unavailable")
+            return
         while self.active.is_set():
             start = time.monotonic()
             try:
                 import base64
 
-                data, w, h = self._grab(self.host.max_width, self.host.quality)
+                data, w, h = grab(self.host.max_width, self.host.quality)
                 proto.send_msg(
                     self.conn,
                     {
