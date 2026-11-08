@@ -9,10 +9,12 @@ seçer:
 from __future__ import annotations
 
 import sys
+import threading
 import tkinter as tk
+from tkinter import messagebox
 from types import SimpleNamespace
 
-from . import ui
+from . import ui, updater, version
 from .ui import THEME, f, mix
 
 _HOST_DEFAULTS = dict(
@@ -147,9 +149,97 @@ def _choose_role() -> str | None:
         tk.Label(b, text=f"{icon}  {text}", bg=THEME.surface, fg=THEME.text_muted,
                  font=f(9)).pack()
 
+    # --- Sürüm + güncelleme ---
+    _build_update_row(root)
+
     ui.fade_in(root)
     root.mainloop()
     return choice["role"]
+
+
+def _build_update_row(root: tk.Misc) -> None:
+    """Açılış ekranının altına sürüm etiketi + güncelleme düğmesi ekler."""
+    row = tk.Frame(root, bg=THEME.bg)
+    row.pack(side="bottom", pady=(0, 8))
+    tk.Label(row, text=version.version_string(), bg=THEME.bg,
+             fg=THEME.text_muted, font=f(9)).pack(side="left", padx=(0, 10))
+
+    state = {"busy": False}
+    status = tk.Label(row, text="", bg=THEME.bg, fg=THEME.text_muted, font=f(9))
+
+    def set_status(text, color=THEME.text_muted):
+        status.configure(text=text, fg=color)
+
+    def do_update():
+        if state["busy"]:
+            return
+        if not updater.is_frozen():
+            messagebox.showinfo(
+                "Güncelleme",
+                "Geliştirme modunda otomatik güncelleme yoktur.\n"
+                "Terminal'de 'git pull' ile güncelleyip yeniden derleyin.",
+                parent=root)
+            return
+        if not messagebox.askyesno(
+                "Güncelle",
+                "Yeni sürüm indirilip kurulacak ve uygulama yeniden "
+                "başlatılacak.\nDevam edilsin mi?", parent=root):
+            return
+        state["busy"] = True
+        set_status("indiriliyor…", THEME.primary)
+
+        def work():
+            try:
+                updater.apply_update()
+                root.after(0, lambda: (
+                    set_status("güncelleniyor, yeniden başlatılıyor…", THEME.primary),
+                    root.after(800, lambda: (root.destroy(), sys.exit(0)))))
+            except Exception as exc:
+                msg = str(exc)
+                def fail():
+                    state["busy"] = False
+                    set_status("güncelleme başarısız", THEME.danger)
+                    messagebox.showerror("Güncelleme hatası", msg, parent=root)
+                root.after(0, fail)
+        threading.Thread(target=work, daemon=True).start()
+
+    def do_check():
+        if state["busy"]:
+            return
+        state["busy"] = True
+        set_status("denetleniyor…")
+
+        def work():
+            avail, rem = updater.check()
+            def done():
+                state["busy"] = False
+                if avail:
+                    btn.configure(text="⬇ Güncelle (yeni sürüm!)")
+                    btn._command = do_update
+                    set_status("yeni sürüm var", THEME.success)
+                elif rem:
+                    set_status("güncelsiniz ✓", THEME.success)
+                else:
+                    set_status("denetlenemedi (internet?)", THEME.warning)
+            root.after(0, done)
+        threading.Thread(target=work, daemon=True).start()
+
+    btn = ui.RoundedButton(row, "Güncellemeleri Denetle", do_check, kind="ghost",
+                           width=200, height=30, radius=9, bg=THEME.bg,
+                           font=f(9, "bold"))
+    btn.pack(side="left")
+    status.pack(side="left", padx=(10, 0))
+
+    # Açılışta sessizce denetle; yeni sürüm varsa düğmeyi öne çıkar.
+    def silent():
+        avail, _ = updater.check()
+        def show():
+            if avail and not state["busy"]:
+                btn.configure(text="⬇ Güncelle (yeni sürüm!)")
+                btn._command = do_update
+                set_status("yeni sürüm var", THEME.success)
+        root.after(0, show)
+    threading.Thread(target=silent, daemon=True).start()
 
 
 def main(argv=None) -> int:

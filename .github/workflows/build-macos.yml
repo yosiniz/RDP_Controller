@@ -44,6 +44,11 @@ jobs:
           RDPCTL_RELAY_HOST: ${{ vars.RDPCTL_RELAY_HOST }}
           RDPCTL_RELAY_PORT: ${{ vars.RDPCTL_RELAY_PORT }}
 
+      - name: Build kimliğini göm (otomatik güncelleme için)
+        run: python packaging/embed_build.py
+        env:
+          RDPCTL_BUILD_ID: ${{ github.sha }}
+
       - name: Uygulamayı ve kaldırıcıyı paketle
         run: |
           pyinstaller --noconfirm packaging/rdpctl.spec
@@ -66,6 +71,16 @@ jobs:
             dist/rdpctl-kaldir-${{ matrix.arch }}.app.zip
             dist/SHA256-${{ matrix.arch }}.txt
           if-no-files-found: error
+
+      - name: "'latest' sürümüne .app zip ekle (otomatik güncelleme)"
+        if: startsWith(github.ref, 'refs/heads/claude/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest
+          prerelease: true
+          files: |
+            dist/rdpctl-${{ matrix.arch }}.app.zip
 
       - name: Etiketlendiyse Release'e ekle
         if: startsWith(github.ref, 'refs/tags/v')
