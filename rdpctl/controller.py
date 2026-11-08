@@ -43,9 +43,35 @@ class ControllerApp:
         self._disp_w = 0
         self._disp_h = 0
 
+        # Thread'lerin ana thread'de arayüz çalıştırması için güvenli kuyruk.
+        # Tkinter yalnızca ana thread'den çağrılmalı; arka plan thread'inden
+        # root.after çağrısı "Tcl_AsyncDelete ... wrong thread" ile çökertir.
+        self._ui_queue: "queue.Queue" = queue.Queue()
+
         self.root = tk.Tk()
         self.root.title("rdpctl — Uzak Bilgisayara Bağlan")
+        self.root.after(50, self._pump_ui)
         self._build_login()
+
+    def _post(self, fn) -> None:
+        """Arka plan thread'inden ana thread'de çalıştırılacak iş ekler."""
+        self._ui_queue.put(fn)
+
+    def _pump_ui(self) -> None:
+        import queue as _q
+        try:
+            while True:
+                fn = self._ui_queue.get_nowait()
+                try:
+                    fn()
+                except Exception:
+                    pass
+        except _q.Empty:
+            pass
+        try:
+            self.root.after(50, self._pump_ui)
+        except tk.TclError:
+            pass
 
     # --- Giriş ekranı ------------------------------------------------------
     def _build_login(self) -> None:
@@ -287,7 +313,7 @@ class ControllerApp:
             self._remote_h = reply.get("h", 0)
             self.sock = conn
             self._connected.set()
-            self.root.after(0, self._build_viewer)
+            self._post(self._build_viewer)
             threading.Thread(target=self._recv_loop, daemon=True).start()
         except Exception as exc:
             self._login_fail(f"Hata: {exc}")
@@ -302,7 +328,7 @@ class ControllerApp:
             self.login_status.configure(text="✕  " + text, fg=THEME.danger)
             self.connect_btn.configure(state="normal")
             self._shake(self.connect_btn)
-        self.root.after(0, go)
+        self._post(go)
 
     def _shake(self, widget, i=0):
         """Hata durumunda kısa yatay sallanma animasyonu."""
@@ -312,7 +338,7 @@ class ControllerApp:
             widget.after(30, lambda: self._shake(widget, i + 1))
 
     def _login_status_async(self, text: str) -> None:
-        self.root.after(0, lambda: self.login_status.configure(text=text, fg=THEME.text_muted))
+        self._post(lambda: self.login_status.configure(text=text, fg=THEME.text_muted))
 
     # --- Görüntüleyici -----------------------------------------------------
     def _build_viewer(self) -> None:
@@ -492,10 +518,7 @@ class ControllerApp:
         def go():
             messagebox.showinfo("Bağlantı kapandı", f"Oturum sona erdi: {reason}")
             self.root.destroy()
-        try:
-            self.root.after(0, go)
-        except RuntimeError:
-            pass
+        self._post(go)
 
     def run(self) -> None:
         self.root.mainloop()

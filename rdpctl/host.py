@@ -412,6 +412,10 @@ class HostApp:
                     self._clear_banner()
                     self.disconnect_btn.set_enabled(False)
                     self._set_status("Bağlantı bekleniyor…", "waiting")
+                elif kind == "enable_disconnect":
+                    self.disconnect_btn.set_enabled(bool(payload))
+                elif kind == "show_banner":
+                    self._show_banner(payload)
         except queue.Empty:
             pass
         self.root.after(100, self._pump_gui_queue)
@@ -690,9 +694,13 @@ class HostApp:
             sink=lambda kind, path: self.audit.file_change(identity.full_name, kind, path),
         )
         self._watcher.start()
+        # NOT: Bu metot arka plan thread'inde çalışır. Tkinter yalnızca ana
+        # thread'den çağrılabilir; aksi halde "Tcl_AsyncDelete: async handler
+        # deleted by the wrong thread" ile çökme olur. Bu yüzden TÜM arayüz
+        # işlemlerini kuyruğa koyuyoruz (ana thread'deki _pump_gui_queue işler).
         self._gui_queue.put(("status", (f"Aktif — {identity.full_name} bağlı ({ip})", "active")))
-        self.root.after(0, lambda: self.disconnect_btn.set_enabled(True))
-        self.root.after(0, lambda: self._show_banner(identity.full_name))
+        self._gui_queue.put(("enable_disconnect", True))
+        self._gui_queue.put(("show_banner", identity.full_name))
         session.run()
 
     def _on_session_ended(self, session: "_Session") -> None:
