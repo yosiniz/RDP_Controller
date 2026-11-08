@@ -1,0 +1,24 @@
+# rdpctl relay (buluşma/aktarma) sunucusu — systemd servisi
+# Kurulum: bu dosyayı /etc/systemd/system/ içine kopyalayın, sonra:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now rdpctl-relay
+[Unit]
+Description=rdpctl relay (bulusma/aktarma) sunucusu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rdpctl
+WorkingDirectory=/opt/rdpctl
+ExecStart=/usr/bin/python3 -m rdpctl.relay --host 0.0.0.0 --port 7444
+Restart=always
+RestartSec=3
+# Güvenlik sertleştirme (relay hiçbir dosyaya yazmaz)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
