@@ -43,6 +43,12 @@ def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def is_store_install() -> bool:
+    """Microsoft Store (MSIX) kurulumu mu? Store paketleri WindowsApps altinda
+    salt-okunur kurulur; guncellemeleri Store yapar, kendimiz yapamayiz."""
+    return sys.platform.startswith("win") and "\\windowsapps\\" in (sys.executable or "").lower()
+
+
 def _http_get(url: str, timeout: float = 20.0) -> bytes:
     ctx = ssl.create_default_context()
     req = urllib.request.Request(url, headers=_UA)
@@ -61,7 +67,7 @@ def check() -> tuple[bool, str]:
     bu surumler 'git pull' ile guncellenir.
     """
     cur = version.build_id()
-    if not cur:
+    if not cur or is_store_install():
         return (False, "")
     try:
         rem = remote_build()
@@ -83,6 +89,9 @@ def apply_update() -> None:
     if not is_frozen():
         raise RuntimeError("Guncelleme yalnizca paketlenmis surumde yapilabilir "
                            "(gelistirme modunda 'git pull' kullanin).")
+    if is_store_install():
+        raise RuntimeError("Bu surum Microsoft Store'dan kuruldu; guncellemeleri "
+                           "Store otomatik yapar.")
     if sys.platform.startswith("win"):
         _apply_windows()
     elif sys.platform == "darwin":
